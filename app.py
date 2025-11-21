@@ -277,9 +277,9 @@ def show_upload_page():
 
     # Upload file
     uploaded_file = st.file_uploader(
-        "Trascina qui il tuo file CSV oppure clicca per selezionarlo",
-        type=['csv'],
-        help="Carica il file CSV scaricato dalla tua banca"
+        "Trascina qui il tuo file CSV/Excel oppure clicca per selezionarlo",
+        type=['csv', 'xlsx', 'xls'],
+        help="Carica il file CSV o Excel (XLS/XLSX) scaricato dalla tua banca"
     )
 
     if uploaded_file:

@@ -10,26 +10,38 @@ from datetime import datetime
 
 def parse_bank_csv(uploaded_file, date_format='auto'):
     """
-    Parse e valida file CSV bancario
+    Parse e valida file CSV o Excel bancario
 
     Args:
-        uploaded_file: File caricato da Streamlit
+        uploaded_file: File caricato da Streamlit (CSV, XLS, XLSX)
         date_format: Formato data ('auto', 'DD/MM/YYYY', 'YYYY-MM-DD', etc.)
 
     Returns:
         DataFrame con colonne standardizzate o None in caso di errore
     """
     try:
-        # Prova a leggere il CSV con diversi encoding
-        try:
-            df = pd.read_csv(uploaded_file, encoding='utf-8')
-        except:
-            uploaded_file.seek(0)
+        # Rileva il tipo di file dal nome
+        file_name = uploaded_file.name.lower()
+
+        # Leggi file Excel (XLS o XLSX)
+        if file_name.endswith('.xlsx') or file_name.endswith('.xls'):
             try:
-                df = pd.read_csv(uploaded_file, encoding='latin-1')
+                df = pd.read_excel(uploaded_file, engine='openpyxl')
             except:
                 uploaded_file.seek(0)
-                df = pd.read_csv(uploaded_file, encoding='iso-8859-1', sep=';')
+                df = pd.read_excel(uploaded_file)
+
+        # Leggi file CSV con diversi encoding
+        else:
+            try:
+                df = pd.read_csv(uploaded_file, encoding='utf-8')
+            except:
+                uploaded_file.seek(0)
+                try:
+                    df = pd.read_csv(uploaded_file, encoding='latin-1')
+                except:
+                    uploaded_file.seek(0)
+                    df = pd.read_csv(uploaded_file, encoding='iso-8859-1', sep=';')
 
         # Auto-detect colonne
         column_mapping = detect_columns(df)
