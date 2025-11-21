@@ -66,6 +66,17 @@ class ExpenseDB:
             )
         ''')
 
+        # Tabella apprendimento merchant -> categoria
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS merchant_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                merchant TEXT UNIQUE NOT NULL,
+                category TEXT NOT NULL,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                usage_count INTEGER DEFAULT 1
+            )
+        ''')
+
         conn.commit()
 
         # Aggiungi categorie predefinite se non esistono
@@ -84,6 +95,7 @@ class ExpenseDB:
             ('Salute', 150, '#F7DC6F', '⚕️'),
             ('Svago', 150, '#BB8FCE', '🎬'),
             ('Casa', 400, '#85C1E2', '🏠'),
+            ('Entrate', 0, '#2ECC71', '💰'),
             ('Altro', 100, '#95A5A6', '📦'),
             ('Non Categorizzato', 0, '#BDC3C7', '❓')
         ]
@@ -252,3 +264,55 @@ class ExpenseDB:
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df
+
+    def learn_merchant_category(self, merchant, category):
+        """Impara o aggiorna associazione merchant -> categoria"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Verifica se esiste già
+        cursor.execute("SELECT usage_count FROM merchant_categories WHERE merchant = ?", (merchant,))
+        result = cursor.fetchone()
+
+        if result:
+            # Aggiorna categoria e incrementa contatore
+            cursor.execute(
+                "UPDATE merchant_categories SET category = ?, usage_count = usage_count + 1, last_used = CURRENT_TIMESTAMP WHERE merchant = ?",
+                (category, merchant)
+            )
+        else:
+            # Inserisci nuovo
+            cursor.execute(
+                "INSERT INTO merchant_categories (merchant, category) VALUES (?, ?)",
+                (merchant, category)
+            )
+
+        conn.commit()
+        conn.close()
+
+    def get_learned_category(self, merchant):
+        """Ottieni categoria appresa per un merchant"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT category FROM merchant_categories WHERE merchant = ?", (merchant,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+
+    def get_all_learned_merchants(self):
+        """Ottieni tutte le associazioni merchant -> categoria"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            "SELECT merchant, category, usage_count, last_used FROM merchant_categories ORDER BY usage_count DESC",
+            conn
+        )
+        conn.close()
+        return df
+
+    def delete_learned_merchant(self, merchant):
+        """Elimina un'associazione merchant -> categoria appresa"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM merchant_categories WHERE merchant = ?", (merchant,))
+        conn.commit()
+        conn.close()

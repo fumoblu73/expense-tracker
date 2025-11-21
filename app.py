@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).parent))
 # Import moduli personalizzati
 from database.db_manager import ExpenseDB
 from utils.csv_parser import parse_bank_csv, validate_csv_preview, get_sample_csv_template
+from utils.smart_categorization import smart_categorize_transactions, extract_merchant
 from utils.visualizations import (
     create_monthly_summary,
     create_category_pie,
@@ -251,12 +252,22 @@ def show_upload_page():
 
     st.info("""
     📋 **Come funziona:**
-    1. Scarica il file CSV dalla tua banca
+    1. Scarica il file CSV/Excel dalla tua banca
     2. Caricalo qui sotto
     3. Verifica l'anteprima
     4. Clicca su Salva
 
-    Formati supportati: CSV con colonne Data, Descrizione, Importo
+    Formati supportati: CSV, Excel (XLS/XLSX)
+    """)
+
+    st.success("""
+    🧠 **Sistema di Apprendimento Intelligente Attivo!**
+
+    L'app categorizza automaticamente le transazioni riconoscendo i merchant (negozi, ristoranti, ecc.) e impara dalle tue scelte!
+
+    ✅ Categorizzazione automatica alla prima importazione
+    ✅ Riconoscimento merchant da descrizioni bancarie
+    ✅ Apprendimento continuo dalle tue correzioni
     """)
 
     # Template di esempio
@@ -290,17 +301,29 @@ def show_upload_page():
             # Mostra anteprima
             if validate_csv_preview(df, num_rows=10):
 
-                # Opzione per categorizzazione automatica semplice
-                st.subheader("🏷️ Categorizzazione")
-                auto_categorize = st.checkbox(
-                    "Prova categorizzazione automatica (beta)",
-                    help="Assegna automaticamente categorie basandosi sulle descrizioni"
-                )
+                # Categorizzazione automatica intelligente
+                st.subheader("🧠 Categorizzazione Intelligente")
 
-                if auto_categorize:
-                    df = auto_categorize_transactions(df, db.get_categories())
-                    st.success("✅ Categorizzazione automatica completata!")
-                    st.dataframe(df[['description', 'category']].head(10), use_container_width=True)
+                col1, col2 = st.columns(2)
+                with col1:
+                    use_smart_cat = st.checkbox(
+                        "✨ Usa categorizzazione automatica",
+                        value=True,
+                        help="Categorizza automaticamente usando intelligenza artificiale e apprendimento"
+                    )
+                with col2:
+                    if use_smart_cat:
+                        st.info("💡 L'app ricorderà le tue scelte per il futuro!")
+
+                if use_smart_cat:
+                    with st.spinner("🧠 Analisi transazioni in corso..."):
+                        df = smart_categorize_transactions(df, db)
+
+                    st.success("✅ Categorizzazione completata!")
+
+                    # Mostra anteprima con merchant estratto
+                    preview_cols = ['description', 'merchant', 'category', 'amount']
+                    st.dataframe(df[preview_cols].head(15), use_container_width=True)
 
                 # Salva nel database
                 if st.button("💾 Salva nel Database", use_container_width=True, type="primary"):
@@ -438,6 +461,8 @@ def show_categories_page():
             st.write(f"Trovate **{len(uncategorized)}** transazioni non categorizzate")
 
             if len(uncategorized) > 0:
+                st.info("💡 **Sistema di Apprendimento Attivo**: Quando categorizzi una transazione, l'app ricorderà automaticamente il negozio/merchant per le prossime volte!")
+
                 # Mostra le prime 20
                 for idx, row in uncategorized.head(20).iterrows():
                     with st.container():
@@ -445,6 +470,11 @@ def show_categories_page():
 
                         with col1:
                             st.write(f"**{row['description']}**")
+
+                            # Estrai e mostra merchant se rilevato
+                            merchant = extract_merchant(row['description'])
+                            if merchant:
+                                st.caption(f"🏪 Merchant: **{merchant}**")
                             st.caption(f"{row['date']} - €{row['amount']:,.2f}")
 
                         with col2:
@@ -457,11 +487,54 @@ def show_categories_page():
 
                         with col3:
                             if st.button("💾", key=f"save_cat_{row['id']}", help="Salva"):
+                                # Aggiorna categoria transazione
                                 db.update_transaction_category(row['id'], new_cat)
-                                st.success("✅")
+
+                                # Impara associazione merchant -> categoria
+                                merchant = extract_merchant(row['description'])
+                                if merchant:
+                                    db.learn_merchant_category(merchant, new_cat)
+                                    st.success(f"✅ Salvato! L'app ricorderà **{merchant}** → {new_cat}")
+                                else:
+                                    st.success("✅ Categoria aggiornata")
+
                                 st.rerun()
 
                         st.divider()
+            else:
+                st.success("🎉 Tutte le transazioni sono categorizzate!")
+
+        # Sezione gestione merchant appresi
+        st.subheader("🧠 Merchant Appresi")
+        learned = db.get_all_learned_merchants()
+
+        if len(learned) > 0:
+            st.write(f"L'app ha memorizzato **{len(learned)}** associazioni merchant → categoria")
+
+            # Mostra in formato tabella
+            learned_df = pd.DataFrame(learned)
+            learned_df = learned_df.sort_values('usage_count', ascending=False)
+
+            # Formatta per visualizzazione
+            display_df = learned_df[['merchant', 'category', 'usage_count']].copy()
+            display_df.columns = ['Merchant', 'Categoria', 'Utilizzi']
+
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            # Opzione per cancellare associazione
+            with st.expander("🗑️ Gestisci Associazioni Apprese"):
+                merchant_to_delete = st.selectbox(
+                    "Seleziona merchant da rimuovere",
+                    options=learned_df['merchant'].tolist(),
+                    key="delete_merchant"
+                )
+
+                if st.button("🗑️ Rimuovi Associazione", type="secondary"):
+                    db.delete_learned_merchant(merchant_to_delete)
+                    st.success(f"✅ Associazione per **{merchant_to_delete}** rimossa!")
+                    st.rerun()
+        else:
+            st.info("Nessun merchant memorizzato ancora. Inizia a categorizzare le transazioni!")
 
 
 def show_reports_page():

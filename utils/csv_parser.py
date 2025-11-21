@@ -71,6 +71,9 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
         # Rimuovi righe con valori nulli critici
         df = df.dropna(subset=['date', 'amount'])
 
+        # Aggiungi colonna merchant (vuota per ora, verrà popolata dall'app)
+        df['merchant'] = ''
+
         # Aggiungi colonna categoria (inizialmente 'Non Categorizzato')
         df['category'] = 'Non Categorizzato'
 
