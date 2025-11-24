@@ -63,15 +63,17 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
         # Auto-detect colonne
         column_mapping = detect_columns(df)
 
+        # DEBUG: Mostra sempre le colonne trovate
+        st.info("📋 **Debug - Colonne trovate nel file:**")
+        for col in df.columns.tolist():
+            st.write(f"  - `{col}`")
+        st.info("📋 **Debug - Mapping rilevato:**")
+        for key, val in column_mapping.items():
+            st.write(f"  - {key} → `{val}`")
+
         # Valida che ci siano le colonne necessarie
         if not all(k in column_mapping for k in ['date', 'amount', 'description']):
             st.error("⚠️ Il file non contiene tutte le colonne necessarie")
-            st.info("📋 **Colonne trovate nel file:**")
-            for col in df.columns.tolist():
-                st.write(f"  - `{col}`")
-            st.info("📋 **Mapping rilevato:**")
-            for key, val in column_mapping.items():
-                st.write(f"  - {key} → `{val}`")
             st.warning("💡 Assicurati che il file contenga almeno: Data, Importo, Descrizione")
             return None
 
