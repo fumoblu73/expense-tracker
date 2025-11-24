@@ -177,10 +177,16 @@ def smart_categorize_transactions(df, db):
     for idx, row in df.iterrows():
         description = row.get('description', '')
         amount = row.get('amount', 0)
+        amount_sign = row.get('amount_sign', 'expense')
 
         # Estrai merchant
         merchant = extract_merchant(description)
         merchants.append(merchant)
+
+        # Se è un'entrata (positivo), categorizza come "Entrate"
+        if amount_sign == 'income':
+            categories.append('Entrate')
+            continue
 
         # Prova a recuperare categoria appresa
         if merchant:

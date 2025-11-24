@@ -93,11 +93,17 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
         # Converti data
         df['date'] = parse_dates(df['date'], date_format)
 
-        # Converti importo in numero
+        # Converti importo in numero (mantiene il segno)
         df['amount'] = parse_amounts(df['amount'])
 
         # Rimuovi righe con valori nulli critici
         df = df.dropna(subset=['date', 'amount'])
+
+        # Salva il segno originale per categorizzazione Entrate/Uscite
+        df['amount_sign'] = df['amount'].apply(lambda x: 'income' if x > 0 else 'expense')
+
+        # Converti importi in valore assoluto (il database salva tutto positivo)
+        df['amount'] = df['amount'].abs()
 
         # Aggiungi colonna merchant (vuota per ora, verrà popolata dall'app)
         df['merchant'] = ''
@@ -202,9 +208,9 @@ def parse_dates(date_series, date_format='auto'):
 
 def parse_amounts(amount_series):
     """Parse importi gestendo formati italiani"""
-    # Se è già numerico, restituisci
+    # Se è già numerico, restituisci (mantieni il segno!)
     if pd.api.types.is_numeric_dtype(amount_series):
-        return pd.to_numeric(amount_series, errors='coerce').abs()
+        return pd.to_numeric(amount_series, errors='coerce')
 
     # Converti in stringa
     amount_series = amount_series.astype(str)
@@ -226,8 +232,8 @@ def parse_amounts(amount_series):
     # Rimuovi spazi extra
     amount_series = amount_series.str.strip()
 
-    # Converti in numero e prendi valore assoluto
-    return pd.to_numeric(amount_series, errors='coerce').abs()
+    # Converti in numero MANTENENDO IL SEGNO (negativo = spesa, positivo = entrata)
+    return pd.to_numeric(amount_series, errors='coerce')
 
 
 def validate_csv_preview(df, num_rows=5):
