@@ -367,6 +367,20 @@ def show_dashboard():
 
     # Top spese
     st.subheader("💸 Top 10 Spese del Mese")
+
+    # Conta entrate vs spese
+    income_count = len(month_transactions[month_transactions['category'] == 'Entrate'])
+    expense_count = len(month_transactions[month_transactions['category'] != 'Entrate'])
+
+    if income_count > 0 and expense_count == 0:
+        st.info(f"""
+        📊 **Nota**: Questo mese sono state registrate solo **{income_count} entrate** (bonifici, rimborsi, stipendi).
+
+        Per vedere le categorie di spesa (Alimentari, Utenze, Trasporti, ecc.), importa un file che contenga anche le **uscite/spese**.
+
+        Le transazioni con importo **negativo** nel file bancario vengono categorizzate automaticamente nelle varie categorie di spesa.
+        """)
+
     top_expenses = create_top_expenses_table(month_transactions, limit=10)
     if top_expenses is not None:
         st.dataframe(top_expenses, use_container_width=True, hide_index=True)

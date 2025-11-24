@@ -213,15 +213,27 @@ def create_daily_spending_trend(df, days=30):
 
 
 def create_top_expenses_table(df, limit=10):
-    """Crea tabella delle spese più alte"""
+    """Crea tabella delle spese più alte (escluse le entrate)"""
     if df is None or len(df) == 0:
         return None
 
     df_copy = df.copy()
     df_copy['date'] = pd.to_datetime(df_copy['date'])
 
+    # Filtra solo spese (escludi entrate)
+    expenses_only = df_copy[df_copy['category'] != 'Entrate']
+
+    if len(expenses_only) == 0:
+        # Se non ci sono spese, mostra messaggio
+        return pd.DataFrame({
+            'Data': ['---'],
+            'Descrizione': ['Nessuna spesa trovata'],
+            'Categoria': ['Solo entrate nel periodo'],
+            'Importo': ['€0,00']
+        })
+
     # Ordina per importo
-    top_expenses = df_copy.nlargest(limit, 'amount')[
+    top_expenses = expenses_only.nlargest(limit, 'amount')[
         ['date', 'description', 'category', 'amount']
     ].copy()
 
