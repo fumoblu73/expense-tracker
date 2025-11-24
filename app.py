@@ -26,9 +26,11 @@ from utils.visualizations import (
     create_monthly_summary,
     create_category_pie,
     create_budget_comparison,
-    create_daily_spending_trend,
+    create_monthly_category_vs_budget,
+    create_income_vs_expenses_trend,
     create_top_expenses_table,
-    create_category_trend
+    create_category_trend,
+    style_transaction_amounts
 )
 from utils.budget_alerts import (
     check_budget_alerts,
@@ -360,10 +362,31 @@ def show_dashboard():
         if fig_budget:
             st.plotly_chart(fig_budget, use_container_width=True)
 
-        # Trend giornaliero
-        fig_daily = create_daily_spending_trend(transactions, days=30)
-        if fig_daily:
-            st.plotly_chart(fig_daily, use_container_width=True)
+        # Nuovo: Andamento mensile categorie vs budget con selettore
+        st.subheader("📊 Andamento Mensile Categorie vs Budget")
+
+        # Prepara lista categorie con budget
+        categories_with_budget = categories[categories['budget'] > 0]['name'].tolist()
+        income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
+        categories_with_budget = [c for c in categories_with_budget if c not in income_categories]
+
+        if len(categories_with_budget) > 0:
+            selected_category = st.selectbox(
+                "Seleziona Categoria",
+                options=["Tutte"] + categories_with_budget,
+                key="category_trend_selector"
+            )
+
+            fig_cat_budget = create_monthly_category_vs_budget(transactions, categories, selected_category)
+            if fig_cat_budget:
+                st.plotly_chart(fig_cat_budget, use_container_width=True)
+        else:
+            st.info("💡 Imposta i budget nelle categorie per visualizzare questo grafico")
+
+        # Nuovo: Confronto entrate vs spese mensili
+        fig_income_expenses = create_income_vs_expenses_trend(transactions, months=6)
+        if fig_income_expenses:
+            st.plotly_chart(fig_income_expenses, use_container_width=True)
 
     # Top spese
     st.subheader("💸 Top 10 Spese del Mese")
@@ -898,7 +921,9 @@ def show_reports_page():
         display_df['amount'] = display_df['amount'].apply(format_currency_ita)
         display_df.columns = ['Data', 'Descrizione', 'Categoria', 'Importo']
 
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        # Applica colori: rosso per spese, verde per entrate
+        styled_df = style_transaction_amounts(display_df)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         # Export
         csv = month_data.to_csv(index=False)

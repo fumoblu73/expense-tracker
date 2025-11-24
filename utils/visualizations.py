@@ -176,44 +176,202 @@ def create_budget_comparison(df, categories_df, month=None):
     return fig
 
 
-def create_daily_spending_trend(df, days=30):
-    """Crea grafico andamento spese giornaliere"""
+def create_monthly_category_vs_budget(df, categories_df, selected_category=None):
+    """
+    Crea grafico andamento mensile categoria vs budget
+
+    Args:
+        df: DataFrame transazioni
+        categories_df: DataFrame categorie con budget
+        selected_category: Categoria specifica da mostrare (None = tutte con budget)
+
+    Returns:
+        Figura Plotly
+    """
+    if df is None or len(df) == 0 or categories_df is None:
+        return None
+
+    df_copy = df.copy()
+    df_copy['date'] = pd.to_datetime(df_copy['date'])
+
+    # Categorie entrate da escludere
+    income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
+
+    # Filtra categorie con budget impostato
+    categories_with_budget = categories_df[categories_df['budget'] > 0]
+
+    if len(categories_with_budget) == 0:
+        return None
+
+    # Se specificata una categoria, filtra
+    if selected_category and selected_category != "Tutte":
+        categories_with_budget = categories_with_budget[categories_with_budget['name'] == selected_category]
+
+    # Aggrega per mese e categoria
+    df_copy['month'] = df_copy['date'].dt.to_period('M')
+    monthly_by_cat = df_copy.groupby(['month', 'category'])['amount'].sum().reset_index()
+    monthly_by_cat['month'] = monthly_by_cat['month'].astype(str)
+
+    fig = go.Figure()
+
+    # Per ogni categoria con budget, aggiungi traccia spesa e budget
+    for _, cat in categories_with_budget.iterrows():
+        cat_name = cat['name']
+
+        # Salta categorie di entrate
+        if cat_name in income_categories:
+            continue
+
+        cat_data = monthly_by_cat[monthly_by_cat['category'] == cat_name]
+
+        if len(cat_data) == 0:
+            continue
+
+        # Linea spesa effettiva
+        fig.add_trace(go.Scatter(
+            x=cat_data['month'],
+            y=cat_data['amount'],
+            mode='lines+markers',
+            name=f'{cat_name} (Spesa)',
+            line=dict(width=2),
+            marker=dict(size=8),
+            hovertemplate=f'<b>{cat_name}</b><br>%{{x}}<br>Speso: €%{{y:,.2f}}<extra></extra>'
+        ))
+
+        # Linea budget (costante)
+        fig.add_trace(go.Scatter(
+            x=cat_data['month'],
+            y=[cat['budget']] * len(cat_data),
+            mode='lines',
+            name=f'{cat_name} (Budget)',
+            line=dict(dash='dash', width=2),
+            hovertemplate=f'<b>{cat_name} - Budget</b><br>%{{x}}<br>Budget: €%{{y:,.2f}}<extra></extra>'
+        ))
+
+    title = f"📊 Andamento Mensile: {selected_category if selected_category and selected_category != 'Tutte' else 'Tutte le Categorie'} vs Budget"
+
+    fig.update_layout(
+        title=title,
+        xaxis_title='Mese',
+        yaxis_title='Importo (€)',
+        height=500,
+        margin=dict(l=20, r=20, t=60, b=20),
+        hovermode='x unified',
+        separators=',.',
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        )
+    )
+
+    return fig
+
+
+def create_income_vs_expenses_trend(df, months=6):
+    """
+    Crea grafico confronto totale entrate vs spese mensili
+
+    Args:
+        df: DataFrame transazioni
+        months: Numero di mesi da mostrare (default 6)
+
+    Returns:
+        Figura Plotly
+    """
     if df is None or len(df) == 0:
         return None
 
     df_copy = df.copy()
     df_copy['date'] = pd.to_datetime(df_copy['date'])
 
-    # Ultimi N giorni
-    latest_date = df_copy['date'].max()
-    start_date = latest_date - pd.Timedelta(days=days)
-    df_filtered = df_copy[df_copy['date'] >= start_date]
+    # Categorie che sono ENTRATE
+    income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
 
-    # Aggrega per giorno
-    daily = df_filtered.groupby('date')['amount'].sum().sort_index()
+    # Separa entrate e spese
+    df_income = df_copy[df_copy['category'].isin(income_categories)]
+    df_expenses = df_copy[~df_copy['category'].isin(income_categories)]
 
-    fig = px.line(
-        x=daily.index,
-        y=daily.values,
-        labels={'x': 'Data', 'y': 'Spesa (€)'},
-        title=f'📈 Andamento Spese Giornaliere (Ultimi {days} giorni)',
-        markers=True
-    )
+    # Aggrega per mese
+    df_copy['month'] = df_copy['date'].dt.to_period('M')
+    df_income['month'] = df_income['date'].dt.to_period('M')
+    df_expenses['month'] = df_expenses['date'].dt.to_period('M')
 
-    fig.update_traces(
-        line_color='#FF6B6B',
-        marker=dict(size=8),
-        hovertemplate='<b>%{x|%d/%m/%Y}</b><br>€%{y:,.2f}<extra></extra>'
-    )
+    monthly_income = df_income.groupby('month')['amount'].sum()
+    monthly_expenses = df_expenses.groupby('month')['amount'].sum()
+
+    # Prendi ultimi N mesi
+    all_months = sorted(set(monthly_income.index) | set(monthly_expenses.index))
+    all_months = all_months[-months:] if len(all_months) > months else all_months
+
+    # Riempi mesi mancanti con 0
+    income_values = [monthly_income.get(m, 0) for m in all_months]
+    expense_values = [monthly_expenses.get(m, 0) for m in all_months]
+    month_labels = [str(m) for m in all_months]
+
+    fig = go.Figure()
+
+    # Barra entrate (verde)
+    fig.add_trace(go.Bar(
+        x=month_labels,
+        y=income_values,
+        name='Entrate',
+        marker_color='#4ECDC4',
+        hovertemplate='<b>Entrate</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
+    ))
+
+    # Barra spese (rosso)
+    fig.add_trace(go.Bar(
+        x=month_labels,
+        y=expense_values,
+        name='Spese',
+        marker_color='#FF6B6B',
+        hovertemplate='<b>Spese</b><br>%{x}<br>€%{y:,.2f}<extra></extra>'
+    ))
 
     fig.update_layout(
-        height=350,
+        title='💰 Confronto Entrate vs Spese Mensili',
+        xaxis_title='Mese',
+        yaxis_title='Importo (€)',
+        barmode='group',
+        height=450,
         margin=dict(l=20, r=20, t=60, b=20),
         hovermode='x unified',
-        separators=',.'  # Formato italiano: virgola decimale, punto migliaia
+        separators=',.',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
 
     return fig
+
+
+def style_transaction_amounts(df):
+    """
+    Applica stile colore agli importi delle transazioni
+    Rosso = spese, Verde = entrate
+
+    Args:
+        df: DataFrame con colonne 'category' e 'Importo' già formattate
+
+    Returns:
+        DataFrame con styling applicato
+    """
+    income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
+
+    def color_amount(row):
+        if row['Categoria'] in income_categories:
+            return [''] * (len(row) - 1) + ['color: #4ECDC4; font-weight: bold']  # Verde acqua per entrate
+        else:
+            return [''] * (len(row) - 1) + ['color: #FF6B6B; font-weight: bold']  # Rosso per spese
+
+    return df.style.apply(color_amount, axis=1)
 
 
 def create_top_expenses_table(df, limit=10):
