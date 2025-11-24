@@ -218,19 +218,28 @@ def parse_amounts(amount_series):
     # Rimuovi spazi
     amount_series = amount_series.str.strip()
 
-    # Gestisci formato italiano (1.234,56 -> 1234.56)
-    # Prima sostituisci i punti delle migliaia
-    amount_series = amount_series.str.replace('.', '', regex=False)
-    # Poi sostituisci la virgola decimale con punto
-    amount_series = amount_series.str.replace(',', '.', regex=False)
+    # Gestisci formato italiano: la virgola è SEMPRE decimale, il punto è SEMPRE migliaia
+    # Esempio: -18,30 o -1.234,56
+    # Strategia:
+    # 1. Se c'è virgola → è decimale italiano → rimuovi punti migliaia, sostituisci virgola con punto
+    # 2. Se NO virgola ma c'è punto → potrebbe essere sia inglese (18.30) che migliaia (1.000)
+    #    Per distinguere: se ci sono più di 2 cifre dopo il punto, è migliaia
 
-    # Rimuovi simboli di valuta
-    amount_series = amount_series.str.replace('€', '', regex=False)
-    amount_series = amount_series.str.replace('EUR', '', regex=False)
-    amount_series = amount_series.str.replace('$', '', regex=False)
+    def convert_italian_amount(val):
+        val = str(val).strip()
+        # Rimuovi simboli valuta
+        val = val.replace('€', '').replace('EUR', '').strip()
 
-    # Rimuovi spazi extra
-    amount_series = amount_series.str.strip()
+        if ',' in val:
+            # Formato italiano: virgola = decimale, punto = migliaia
+            # -1.234,56 -> -1234.56
+            val = val.replace('.', '')  # Rimuovi migliaia
+            val = val.replace(',', '.')  # Virgola diventa punto decimale
+        # Altrimenti mantieni com'è (formato già corretto o solo cifre)
+
+        return val
+
+    amount_series = amount_series.apply(convert_italian_amount)
 
     # Converti in numero MANTENENDO IL SEGNO (negativo = spesa, positivo = entrata)
     return pd.to_numeric(amount_series, errors='coerce')
