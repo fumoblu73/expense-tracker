@@ -294,22 +294,21 @@ def show_dashboard():
 
     st.divider()
 
-    # Alert Budget
+    # Alert Budget (nascondibili)
     alerts = check_budget_alerts(transactions, categories, current_month)
     if alerts:
         summary = create_budget_summary_card(alerts)
-        display_budget_summary(summary)
-        st.divider()
-        display_alerts(alerts, show_all=False)
-        st.divider()
 
-    # Anomalie di Spesa
+        with st.expander("⚠️ Alert Budget", expanded=False):
+            display_budget_summary(summary)
+            st.divider()
+            display_alerts(alerts, show_all=False)
+
+    # Anomalie di Spesa (nascondibili)
     anomaly_summary = get_anomaly_summary(transactions, lookback_months=3)
 
     if anomaly_summary['total_count'] > 0:
-        st.warning(f"⚠️ **Transazioni Insolite Rilevate**: {anomaly_summary['total_count']} anomalie negli ultimi 3 mesi")
-
-        with st.expander("📊 Mostra Dettagli Anomalie"):
+        with st.expander(f"🔍 Anomalie Rilevate ({anomaly_summary['total_count']})", expanded=False):
             # Anomalie per importo
             if len(anomaly_summary['amount_anomalies']) > 0:
                 st.subheader("💸 Transazioni con Importi Anomali")
@@ -335,36 +334,41 @@ def show_dashboard():
 
             # Anomalie per frequenza
             if len(anomaly_summary['frequency_anomalies']) > 0:
+                st.divider()
                 st.subheader("🔄 Merchant con Frequenza Insolita")
 
                 for idx, row in anomaly_summary['frequency_anomalies'].head(3).iterrows():
                     st.write(f"**{row['merchant']}**: {row['transaction_count']} transazioni ({format_currency_ita(row['total_amount'])} totale)")
                     st.caption(row['explanation'])
 
-        st.divider()
+    st.divider()
 
-    # Grafici principali (nascondibili)
-    with st.expander("📊 Grafici Analisi", expanded=True):
-        col1, col2 = st.columns(2)
+    # Grafici principali - OGNI GRAFICO NASCONDIBILE SINGOLARMENTE
+    st.subheader("📊 Grafici Analisi")
 
-        with col1:
+    # Row 1: Andamento mensile e Categorie
+    col1, col2 = st.columns(2)
+
+    with col1:
+        with st.expander("📈 Andamento Spese Mensili", expanded=True):
             fig_monthly = create_monthly_summary(transactions)
             if fig_monthly:
                 st.plotly_chart(fig_monthly, use_container_width=True)
 
-        with col2:
+    with col2:
+        with st.expander("🏷️ Spese per Categoria", expanded=True):
             fig_pie = create_category_pie(transactions, categories)
             if fig_pie:
                 st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Budget comparison
+    # Budget vs Spesa Effettiva
+    with st.expander("💰 Budget vs Spesa Effettiva", expanded=True):
         fig_budget = create_budget_comparison(transactions, categories, current_month)
         if fig_budget:
             st.plotly_chart(fig_budget, use_container_width=True)
 
-        # Nuovo: Andamento mensile categorie vs budget con selettore
-        st.subheader("📊 Andamento Mensile Categorie vs Budget")
-
+    # Andamento mensile categorie vs budget
+    with st.expander("📊 Andamento Mensile Categorie vs Budget", expanded=False):
         # Prepara lista categorie con budget
         categories_with_budget = categories[categories['budget'] > 0]['name'].tolist()
         income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
@@ -383,7 +387,8 @@ def show_dashboard():
         else:
             st.info("💡 Imposta i budget nelle categorie per visualizzare questo grafico")
 
-        # Nuovo: Confronto entrate vs spese mensili
+    # Confronto entrate vs spese mensili
+    with st.expander("💰 Entrate vs Spese Mensili", expanded=False):
         fig_income_expenses = create_income_vs_expenses_trend(transactions, months=6)
         if fig_income_expenses:
             st.plotly_chart(fig_income_expenses, use_container_width=True)
@@ -889,21 +894,112 @@ def show_reports_page():
     tabs = st.tabs(["📅 Report Mensile", "📈 Analisi Trend", "📧 Invia Report"])
 
     with tabs[0]:
-        st.subheader("Report Mensile")
+        st.subheader("Report per Periodo")
 
-        # Seleziona mese
-        available_months = transactions['date'].dt.to_period('M').unique()
-        selected_month = st.selectbox(
-            "Seleziona Mese",
-            options=sorted(available_months, reverse=True),
-            format_func=lambda x: x.strftime('%B %Y')
-        )
+        # Selettore periodo con 8 opzioni
+        col1, col2 = st.columns([2, 1])
 
-        month_data = transactions[transactions['date'].dt.to_period('M') == selected_month]
+        with col1:
+            period_type = st.selectbox(
+                "Seleziona Periodo",
+                options=[
+                    "Mese Corrente",
+                    "Mese Scorso",
+                    "Ultimi 2 Mesi",
+                    "I Trimestre (Gen-Mar)",
+                    "II Trimestre (Apr-Giu)",
+                    "III Trimestre (Lug-Set)",
+                    "IV Trimestre (Ott-Dic)",
+                    "Date Personalizzate"
+                ]
+            )
+
+        # Calcola date in base al periodo selezionato
+        now = datetime.now()
+        current_year = now.year
+
+        if period_type == "Mese Corrente":
+            current_month = pd.Period.now('M')
+            month_data = transactions[transactions['date'].dt.to_period('M') == current_month]
+            period_label = current_month.strftime('%B %Y')
+
+        elif period_type == "Mese Scorso":
+            last_month = pd.Period.now('M') - 1
+            month_data = transactions[transactions['date'].dt.to_period('M') == last_month]
+            period_label = last_month.strftime('%B %Y')
+
+        elif period_type == "Ultimi 2 Mesi":
+            current_month = pd.Period.now('M')
+            last_month = current_month - 1
+            month_data = transactions[
+                transactions['date'].dt.to_period('M').isin([current_month, last_month])
+            ]
+            period_label = f"{last_month.strftime('%B')} - {current_month.strftime('%B %Y')}"
+
+        elif period_type == "I Trimestre (Gen-Mar)":
+            start_date = pd.Timestamp(f'{current_year}-01-01')
+            end_date = pd.Timestamp(f'{current_year}-03-31')
+            month_data = transactions[
+                (transactions['date'] >= start_date) & (transactions['date'] <= end_date)
+            ]
+            period_label = f"Q1 {current_year} (Gen-Mar)"
+
+        elif period_type == "II Trimestre (Apr-Giu)":
+            start_date = pd.Timestamp(f'{current_year}-04-01')
+            end_date = pd.Timestamp(f'{current_year}-06-30')
+            month_data = transactions[
+                (transactions['date'] >= start_date) & (transactions['date'] <= end_date)
+            ]
+            period_label = f"Q2 {current_year} (Apr-Giu)"
+
+        elif period_type == "III Trimestre (Lug-Set)":
+            start_date = pd.Timestamp(f'{current_year}-07-01')
+            end_date = pd.Timestamp(f'{current_year}-09-30')
+            month_data = transactions[
+                (transactions['date'] >= start_date) & (transactions['date'] <= end_date)
+            ]
+            period_label = f"Q3 {current_year} (Lug-Set)"
+
+        elif period_type == "IV Trimestre (Ott-Dic)":
+            start_date = pd.Timestamp(f'{current_year}-10-01')
+            end_date = pd.Timestamp(f'{current_year}-12-31')
+            month_data = transactions[
+                (transactions['date'] >= start_date) & (transactions['date'] <= end_date)
+            ]
+            period_label = f"Q4 {current_year} (Ott-Dic)"
+
+        else:  # Date Personalizzate
+            with col2:
+                st.caption("Seleziona range")
+
+            col_start, col_end = st.columns(2)
+            with col_start:
+                start_date = st.date_input(
+                    "Data Inizio",
+                    value=now - pd.Timedelta(days=30),
+                    key="report_start_date"
+                )
+            with col_end:
+                end_date = st.date_input(
+                    "Data Fine",
+                    value=now,
+                    key="report_end_date"
+                )
+
+            start_date = pd.Timestamp(start_date)
+            end_date = pd.Timestamp(end_date)
+
+            month_data = transactions[
+                (transactions['date'] >= start_date) & (transactions['date'] <= end_date)
+            ]
+            period_label = f"{start_date.strftime('%d/%m/%Y')} - {end_date.strftime('%d/%m/%Y')}"
+
+        # Mostra periodo selezionato
+        st.info(f"📅 **Periodo**: {period_label} | **Transazioni**: {len(month_data)}")
 
         # Statistiche
         stats = calculate_spending_statistics(month_data, period='all')
-        display_statistics(stats, period=str(selected_month))
+        display_statistics(stats, period=period_label)
 
         st.divider()
 
@@ -927,10 +1023,11 @@ def show_reports_page():
 
         # Export
         csv = month_data.to_csv(index=False)
+        filename_safe = period_label.replace(' ', '_').replace('/', '-')
         st.download_button(
             "📥 Scarica Report CSV",
             csv,
-            f"report_{selected_month}.csv",
+            f"report_{filename_safe}.csv",
             "text/csv",
             use_container_width=True
         )
