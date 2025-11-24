@@ -26,10 +26,17 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
         # Leggi file Excel (XLS o XLSX)
         if file_name.endswith('.xlsx') or file_name.endswith('.xls'):
             try:
+                # Prima prova con openpyxl (per .xlsx)
                 df = pd.read_excel(uploaded_file, engine='openpyxl')
             except:
                 uploaded_file.seek(0)
-                df = pd.read_excel(uploaded_file)
+                try:
+                    # Poi prova con xlrd (per .xls vecchio formato)
+                    df = pd.read_excel(uploaded_file, engine='xlrd')
+                except:
+                    uploaded_file.seek(0)
+                    # Ultimo tentativo senza specificare engine
+                    df = pd.read_excel(uploaded_file)
 
         # Leggi file CSV con diversi encoding
         else:

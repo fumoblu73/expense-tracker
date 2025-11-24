@@ -112,7 +112,7 @@ class ExpenseDB:
         conn.commit()
 
     def insert_transactions(self, df):
-        """Inserisce transazioni dal DataFrame"""
+        """Inserisce transazioni dal DataFrame evitando duplicati"""
         conn = sqlite3.connect(self.db_path)
 
         # Assicurati che le colonne necessarie esistano
@@ -131,8 +131,27 @@ class ExpenseDB:
         else:
             df_to_insert['notes'] = ''
 
-        df_to_insert.to_sql('transactions', conn, if_exists='append', index=False)
+        # Filtra duplicati: controlla se esiste già una transazione con stessa data, descrizione e importo
+        existing = pd.read_sql_query(
+            "SELECT date, description, amount FROM transactions",
+            conn
+        )
+
+        if len(existing) > 0:
+            # Crea chiave univoca per confronto
+            existing['key'] = existing['date'] + '|' + existing['description'] + '|' + existing['amount'].astype(str)
+            df_to_insert['key'] = df_to_insert['date'] + '|' + df_to_insert['description'] + '|' + df_to_insert['amount'].astype(str)
+
+            # Filtra solo le transazioni nuove (non duplicate)
+            df_to_insert = df_to_insert[~df_to_insert['key'].isin(existing['key'])].copy()
+            df_to_insert = df_to_insert.drop(columns=['key'])
+
+        # Inserisci solo se ci sono transazioni non duplicate
+        if len(df_to_insert) > 0:
+            df_to_insert.to_sql('transactions', conn, if_exists='append', index=False)
+
         conn.close()
+        return len(df_to_insert)  # Ritorna numero di transazioni inserite
 
     def get_all_transactions(self):
         """Recupera tutte le transazioni"""

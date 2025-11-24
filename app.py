@@ -329,12 +329,19 @@ def show_upload_page():
                 if st.button("💾 Salva nel Database", use_container_width=True, type="primary"):
                     with st.spinner("Salvataggio in corso..."):
                         try:
-                            db.insert_transactions(df)
-                            st.success(f"✅ {len(df)} transazioni salvate con successo!")
-                            st.balloons()
+                            total_transactions = len(df)
+                            saved_count = db.insert_transactions(df)
+                            duplicates_count = total_transactions - saved_count
 
-                            # Suggerisci di categorizzare
-                            if not auto_categorize:
+                            if duplicates_count > 0:
+                                st.warning(f"⚠️ Trovati {duplicates_count} duplicati (già presenti nel database)")
+                                st.success(f"✅ {saved_count} nuove transazioni salvate con successo!")
+                            else:
+                                st.success(f"✅ {saved_count} transazioni salvate con successo!")
+                                st.balloons()
+
+                            # Suggerisci di categorizzare se ci sono nuove transazioni
+                            if saved_count > 0 and not auto_categorize:
                                 st.info("💡 Vai su **🏷️ Gestisci Categorie** per categorizzare le transazioni")
 
                         except Exception as e:
