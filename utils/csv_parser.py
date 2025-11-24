@@ -36,12 +36,17 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
                 except:
                     uploaded_file.seek(0)
                     try:
-                        # Potrebbe essere un CSV con estensione .xls
-                        df = pd.read_csv(uploaded_file, sep=';', encoding='latin-1')
+                        # Potrebbe essere un HTML mascherato da .xls (comune per banche italiane)
+                        df = pd.read_html(uploaded_file, encoding='utf-8')[0]
                     except:
                         uploaded_file.seek(0)
-                        # Ultimo tentativo con encoding diverso
-                        df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8')
+                        try:
+                            # Potrebbe essere un CSV con estensione .xls
+                            df = pd.read_csv(uploaded_file, sep=';', encoding='latin-1')
+                        except:
+                            uploaded_file.seek(0)
+                            # Ultimo tentativo con encoding diverso
+                            df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8')
 
         # Leggi file CSV con diversi encoding
         else:
