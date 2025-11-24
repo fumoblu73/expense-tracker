@@ -19,6 +19,8 @@ from database.db_manager import ExpenseDB
 from utils.csv_parser import parse_bank_csv, validate_csv_preview, get_sample_csv_template
 from utils.smart_categorization import smart_categorize_transactions, extract_merchant
 from utils.backup_manager import create_full_backup, extract_backup_info, restore_backup, get_backup_filename
+from utils.recurring_utils import calculate_available_balance, get_recurring_status_for_month
+from utils.anomaly_detection import get_anomaly_summary
 from utils.visualizations import (
     create_monthly_summary,
     create_category_pie,
@@ -211,6 +213,84 @@ def show_dashboard():
 
     st.divider()
 
+    # Card Budget Disponibile & Spese Ricorrenti
+    recurring = db.get_recurring_expenses(active_only=True)
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        # Budget Disponibile
+        balance_info = calculate_available_balance(
+            transactions, categories, recurring,
+            datetime.now().year, datetime.now().month
+        )
+
+        st.markdown("### 💰 Budget Disponibile")
+
+        # Colore basato su stato
+        if balance_info['is_negative']:
+            color = "🔴"
+            status_text = "SUPERATO"
+        elif balance_info['available'] < balance_info['total_budget'] * 0.1:
+            color = "🟠"
+            status_text = "ATTENZIONE"
+        else:
+            color = "🟢"
+            status_text = "OK"
+
+        st.metric(
+            f"{color} Disponibile per {balance_info['days_remaining']} giorni",
+            f"€{balance_info['available']:,.2f}",
+            f"{status_text}"
+        )
+
+        # Dettaglio
+        with st.expander("📊 Dettaglio Calcolo"):
+            st.write(f"**Budget Totale**: €{balance_info['total_budget']:,.2f}")
+            st.write(f"**Speso fino ad oggi**: -€{balance_info['spent']:,.2f}")
+            st.write(f"**Spese ricorrenti da pagare**: -€{balance_info['recurring_pending']:,.2f}")
+            st.write("─" * 40)
+            st.write(f"**Disponibile**: €{balance_info['available']:,.2f}")
+
+            if balance_info['days_remaining'] > 0:
+                st.info(f"💡 Puoi spendere **€{balance_info['daily_allowance']:,.2f}** al giorno per i prossimi **{balance_info['days_remaining']} giorni**")
+
+    with col2:
+        # Spese Ricorrenti
+        st.markdown("### 💳 Spese Ricorrenti")
+
+        if len(recurring) == 0:
+            st.info("Nessuna spesa ricorrente configurata")
+            if st.button("➕ Aggiungi Prima Ricorrente", use_container_width=True):
+                st.session_state['page'] = "💳 Spese Ricorrenti"
+                st.rerun()
+        else:
+            # Calcola totale mensile
+            total_recurring = 0
+            for _, rec in recurring.iterrows():
+                if rec['frequency'] == 'mensile':
+                    total_recurring += rec['amount']
+                elif rec['frequency'] == 'annuale':
+                    total_recurring += rec['amount'] / 12
+
+            st.metric("Totale Mensile", f"€{total_recurring:,.2f}")
+
+            # Status ricorrenti
+            recurring_status = get_recurring_status_for_month(transactions, recurring)
+
+            if len(recurring_status) > 0:
+                paid_count = len(recurring_status[recurring_status['status'] == 'paid'])
+                pending_count = len(recurring_status[recurring_status['status'] == 'pending'])
+
+                st.write(f"✅ Pagate: {paid_count}")
+                st.write(f"⏳ Da pagare: {pending_count}")
+
+            if st.button("📋 Gestisci", use_container_width=True):
+                st.session_state['page'] = "💳 Spese Ricorrenti"
+                st.rerun()
+
+    st.divider()
+
     # Alert Budget
     alerts = check_budget_alerts(transactions, categories, current_month)
     if alerts:
@@ -218,6 +298,46 @@ def show_dashboard():
         display_budget_summary(summary)
         st.divider()
         display_alerts(alerts, show_all=False)
+        st.divider()
+
+    # Anomalie di Spesa
+    anomaly_summary = get_anomaly_summary(transactions, lookback_months=3)
+
+    if anomaly_summary['total_count'] > 0:
+        st.warning(f"⚠️ **Transazioni Insolite Rilevate**: {anomaly_summary['total_count']} anomalie negli ultimi 3 mesi")
+
+        with st.expander("📊 Mostra Dettagli Anomalie"):
+            # Anomalie per importo
+            if len(anomaly_summary['amount_anomalies']) > 0:
+                st.subheader("💸 Transazioni con Importi Anomali")
+
+                for idx, row in anomaly_summary['amount_anomalies'].head(5).iterrows():
+                    col1, col2, col3 = st.columns([3, 2, 2])
+
+                    with col1:
+                        severity_icon = "🔴" if row['severity'] == 'high' else "🟠"
+                        st.write(f"{severity_icon} **{row['description']}**")
+                        st.caption(f"Data: {row['date'].strftime('%d/%m/%Y')}")
+
+                    with col2:
+                        st.metric("Importo", f"€{row['amount']:,.2f}")
+                        st.caption(f"Media: €{row['mean_amount']:,.2f}")
+
+                    with col3:
+                        st.write(f"**+{row['deviation_pct']:.0f}%**")
+                        st.caption(row['explanation'])
+
+                if len(anomaly_summary['amount_anomalies']) > 5:
+                    st.caption(f"... e altre {len(anomaly_summary['amount_anomalies']) - 5} anomalie")
+
+            # Anomalie per frequenza
+            if len(anomaly_summary['frequency_anomalies']) > 0:
+                st.subheader("🔄 Merchant con Frequenza Insolita")
+
+                for idx, row in anomaly_summary['frequency_anomalies'].head(3).iterrows():
+                    st.write(f"**{row['merchant']}**: {row['transaction_count']} transazioni (€{row['total_amount']:,.2f} totale)")
+                    st.caption(row['explanation'])
+
         st.divider()
 
     # Grafici principali
