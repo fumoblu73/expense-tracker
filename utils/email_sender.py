@@ -9,6 +9,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 import streamlit as st
 from datetime import datetime
+from utils.formatters import format_currency_ita
 
 
 def send_monthly_report(recipient_email, report_data, attachment_path=None):
@@ -153,7 +154,7 @@ def create_email_body(report_data):
         <div class="content">
             <div class="metric">
                 <div class="metric-title">Spesa Totale del Mese</div>
-                <div class="metric-value">€{report_data.get('total', 0):,.2f}</div>
+                <div class="metric-value">{format_currency_ita(report_data.get('total', 0))}</div>
             </div>
 
             <div class="metric">
@@ -163,7 +164,7 @@ def create_email_body(report_data):
 
             <div class="metric">
                 <div class="metric-title">Spesa Media Giornaliera</div>
-                <div class="metric-value">€{report_data.get('daily_average', 0):,.2f}</div>
+                <div class="metric-value">{format_currency_ita(report_data.get('daily_average', 0))}</div>
             </div>
 
             <h3 style="margin-top: 30px;">📊 Top Categorie</h3>
@@ -202,7 +203,7 @@ def create_alerts_html(alerts):
         html += f"""
         <div class="{alert_class}">
             <strong>{alert.get('category', 'N/A')}</strong><br>
-            Speso: €{alert.get('spent', 0):,.2f} / Budget: €{alert.get('budget', 0):,.2f}<br>
+            Speso: {format_currency_ita(alert.get('spent', 0))} / Budget: {format_currency_ita(alert.get('budget', 0))}<br>
             <small>{alert.get('percentage', 0):.1f}% del budget utilizzato</small>
         </div>
         """
@@ -267,9 +268,9 @@ def send_budget_alert_email(recipient_email, alert_data):
                     <strong>{alert_data.get('percentage', 0):.1f}%</strong> del budget utilizzato
                 </p>
                 <p>
-                    Speso: <strong>€{alert_data.get('spent', 0):,.2f}</strong><br>
-                    Budget: <strong>€{alert_data.get('budget', 0):,.2f}</strong><br>
-                    Rimanente: <strong>€{alert_data.get('remaining', 0):,.2f}</strong>
+                    Speso: <strong>{format_currency_ita(alert_data.get('spent', 0))}</strong><br>
+                    Budget: <strong>{format_currency_ita(alert_data.get('budget', 0))}</strong><br>
+                    Rimanente: <strong>{format_currency_ita(alert_data.get('remaining', 0))}</strong>
                 </p>
                 <p style="margin-top: 30px; color: #666;">
                     Controlla le tue spese nell'app per maggiori dettagli.

@@ -4,6 +4,7 @@ Sistema di alert per il monitoraggio dei budget
 
 import pandas as pd
 import streamlit as st
+from utils.formatters import format_currency_ita
 
 
 def check_budget_alerts(transactions_df, categories_df, month=None):
@@ -123,9 +124,9 @@ def display_alerts(alerts, show_all=False):
 
                 with col2:
                     if alert['severity'] == 'exceeded':
-                        st.write(f"Sforato di €{abs(alert['remaining']):,.2f}")
+                        st.write(f"Sforato di {format_currency_ita(abs(alert['remaining']))}")
                     else:
-                        st.write(f"Rimangono €{alert['remaining']:,.2f}")
+                        st.write(f"Rimangono {format_currency_ita(alert['remaining'])}")
 
                 with col3:
                     st.write(f"{alert['percentage']:.1f}% usato")
@@ -134,7 +135,7 @@ def display_alerts(alerts, show_all=False):
                 progress_color = get_progress_color(alert['percentage'])
                 st.progress(min(alert['percentage'] / 100, 1.0))
 
-                st.caption(f"Speso: €{alert['spent']:,.2f} / Budget: €{alert['budget']:,.2f}")
+                st.caption(f"Speso: {format_currency_ita(alert['spent'])} / Budget: {format_currency_ita(alert['budget'])}")
                 st.divider()
 
     # Mostra warning
@@ -149,13 +150,13 @@ def display_alerts(alerts, show_all=False):
                     st.write(f"**{alert['icon']} {alert['category']}**")
 
                 with col2:
-                    st.write(f"Rimangono €{alert['remaining']:,.2f}")
+                    st.write(f"Rimangono {format_currency_ita(alert['remaining'])}")
 
                 with col3:
                     st.write(f"{alert['percentage']:.1f}% usato")
 
                 st.progress(alert['percentage'] / 100)
-                st.caption(f"Speso: €{alert['spent']:,.2f} / Budget: €{alert['budget']:,.2f}")
+                st.caption(f"Speso: {format_currency_ita(alert['spent'])} / Budget: {format_currency_ita(alert['budget'])}")
                 st.divider()
 
     # Mostra tutti gli altri se richiesto
@@ -171,13 +172,13 @@ def display_alerts(alerts, show_all=False):
                         st.write(f"**{alert['icon']} {alert['category']}**")
 
                     with col2:
-                        st.write(f"Rimangono €{alert['remaining']:,.2f}")
+                        st.write(f"Rimangono {format_currency_ita(alert['remaining'])}")
 
                     with col3:
                         st.write(f"{alert['percentage']:.1f}% usato")
 
                     st.progress(alert['percentage'] / 100)
-                    st.caption(f"Speso: €{alert['spent']:,.2f} / Budget: €{alert['budget']:,.2f}")
+                    st.caption(f"Speso: {format_currency_ita(alert['spent'])} / Budget: {format_currency_ita(alert['budget'])}")
                     st.divider()
 
 
@@ -228,15 +229,15 @@ def display_budget_summary(summary):
     with col1:
         st.metric(
             "Budget Totale",
-            f"€{summary['total_budget']:,.2f}",
+            format_currency_ita(summary['total_budget']),
             delta=None
         )
 
     with col2:
         st.metric(
             "Speso",
-            f"€{summary['total_spent']:,.2f}",
-            delta=f"-€{summary['total_budget'] - summary['total_spent']:,.2f}"
+            format_currency_ita(summary['total_spent']),
+            delta=f"-{format_currency_ita(summary['total_budget'] - summary['total_spent'])}"
         )
 
     with col3:
@@ -268,14 +269,14 @@ def get_budget_recommendations(alerts):
         for alert in exceeded:
             recommendations.append({
                 'type': 'critical',
-                'message': f"Hai superato il budget per '{alert['category']}' di €{abs(alert['remaining']):,.2f}. Considera di ridurre le spese in questa categoria."
+                'message': f"Hai superato il budget per '{alert['category']}' di {format_currency_ita(abs(alert['remaining']))}. Considera di ridurre le spese in questa categoria."
             })
 
     if critical:
         for alert in critical:
             recommendations.append({
                 'type': 'warning',
-                'message': f"Sei vicino al limite per '{alert['category']}'. Hai ancora €{alert['remaining']:,.2f} disponibili questo mese."
+                'message': f"Sei vicino al limite per '{alert['category']}'. Hai ancora {format_currency_ita(alert['remaining'])} disponibili questo mese."
             })
 
     # Suggerimenti generali
@@ -285,7 +286,7 @@ def get_budget_recommendations(alerts):
         top_category = high_spending[0]
         recommendations.append({
             'type': 'info',
-            'message': f"La categoria con più spese è '{top_category['category']}' (€{top_category['spent']:,.2f}). Verifica se ci sono possibilità di risparmio."
+            'message': f"La categoria con più spese è '{top_category['category']}' ({format_currency_ita(top_category['spent'])}). Verifica se ci sono possibilità di risparmio."
         })
 
     return recommendations

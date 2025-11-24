@@ -5,6 +5,7 @@ Modulo per previsioni e analisi trend
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from utils.formatters import format_currency_ita
 
 
 def simple_moving_average_forecast(df, periods=3, forecast_months=3):
@@ -100,6 +101,7 @@ def plot_forecast(historical, forecast_dates, forecast_values):
         height=450,
         margin=dict(l=20, r=20, t=60, b=20),
         hovermode='x unified',
+        separators=',.',  # Formato italiano: virgola decimale, punto migliaia
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -238,33 +240,33 @@ def display_statistics(stats, period='all'):
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Spesa Totale", f"€{stats['total']:,.2f}")
+        st.metric("Spesa Totale", format_currency_ita(stats['total']))
 
     with col2:
         st.metric("N° Transazioni", f"{stats['count']}")
 
     with col3:
-        st.metric("Media per Transazione", f"€{stats['average']:,.2f}")
+        st.metric("Media per Transazione", format_currency_ita(stats['average']))
 
     with col4:
-        st.metric("Media Giornaliera", f"€{stats['daily_average']:,.2f}")
+        st.metric("Media Giornaliera", format_currency_ita(stats['daily_average']))
 
     # Seconda riga
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Spesa Massima", f"€{stats['max']:,.2f}")
+        st.metric("Spesa Massima", format_currency_ita(stats['max']))
 
     with col2:
-        st.metric("Spesa Minima", f"€{stats['min']:,.2f}")
+        st.metric("Spesa Minima", format_currency_ita(stats['min']))
 
     with col3:
-        st.metric("Mediana", f"€{stats['median']:,.2f}")
+        st.metric("Mediana", format_currency_ita(stats['median']))
 
     with col4:
         if 'top_category' in stats:
             st.metric("Top Categoria", stats['top_category'])
-            st.caption(f"€{stats['top_category_amount']:,.2f}")
+            st.caption(format_currency_ita(stats['top_category_amount']))
 
 
 def compare_periods(df, category=None):
@@ -340,17 +342,17 @@ def display_period_comparison(comparison):
     with col1:
         st.metric(
             "Questo Mese",
-            f"€{comparison['current_month']:,.2f}",
-            delta=f"€{comparison['month_change']:,.2f} ({comparison['month_change_pct']:+.1f}%)",
+            format_currency_ita(comparison['current_month']),
+            delta=f"{format_currency_ita(comparison['month_change'])} ({comparison['month_change_pct']:+.1f}%)",
             delta_color="inverse"
         )
-        st.caption(f"Mese scorso: €{comparison['previous_month']:,.2f}")
+        st.caption(f"Mese scorso: {format_currency_ita(comparison['previous_month'])}")
 
     with col2:
         st.metric(
             "Quest'Anno",
-            f"€{comparison['current_year']:,.2f}",
-            delta=f"€{comparison['year_change']:,.2f} ({comparison['year_change_pct']:+.1f}%)",
+            format_currency_ita(comparison['current_year']),
+            delta=f"{format_currency_ita(comparison['year_change'])} ({comparison['year_change_pct']:+.1f}%)",
             delta_color="inverse"
         )
-        st.caption(f"Anno scorso: €{comparison['previous_year']:,.2f}")
+        st.caption(f"Anno scorso: {format_currency_ita(comparison['previous_year'])}")

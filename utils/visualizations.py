@@ -37,7 +37,8 @@ def create_monthly_summary(df):
         height=400,
         margin=dict(l=20, r=20, t=60, b=20),
         showlegend=False,
-        hovermode='x unified'
+        hovermode='x unified',
+        separators=',.'  # Formato italiano: virgola decimale, punto migliaia
     )
 
     fig.update_traces(
@@ -79,6 +80,7 @@ def create_category_pie(df, categories_df=None):
         height=450,
         margin=dict(l=20, r=20, t=60, b=20),
         showlegend=True,
+        separators=',.',  # Formato italiano: virgola decimale, punto migliaia
         legend=dict(
             orientation="v",
             yanchor="middle",
@@ -161,6 +163,7 @@ def create_budget_comparison(df, categories_df, month=None):
         margin=dict(l=20, r=20, t=60, b=100),
         xaxis_tickangle=-45,
         hovermode='x unified',
+        separators=',.',  # Formato italiano: virgola decimale, punto migliaia
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -206,7 +209,8 @@ def create_daily_spending_trend(df, days=30):
     fig.update_layout(
         height=350,
         margin=dict(l=20, r=20, t=60, b=20),
-        hovermode='x unified'
+        hovermode='x unified',
+        separators=',.'  # Formato italiano: virgola decimale, punto migliaia
     )
 
     return fig
@@ -296,7 +300,8 @@ def create_category_trend(df, category, months=6):
     fig.update_layout(
         height=300,
         margin=dict(l=20, r=20, t=60, b=20),
-        hovermode='x unified'
+        hovermode='x unified',
+        separators=',.'  # Formato italiano: virgola decimale, punto migliaia
     )
 
     return fig
