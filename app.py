@@ -659,7 +659,9 @@ def show_categories_page():
             st.write(f"Trovate **{len(uncategorized)}** transazioni non categorizzate")
 
             if len(uncategorized) > 0:
-                st.info("💡 **Sistema di Apprendimento Attivo**: Quando categorizzi una transazione, l'app ricorderà automaticamente il negozio/merchant per le prossime volte!")
+                st.info("💡 **Sistema di Apprendimento Attivo**: Quando categorizzi una transazione, l'app ricorderà automaticamente:\n"
+                       "- **Spese**: merchant/negozio per categorizzazione futura\n"
+                       "- **Entrate**: pattern descrizione per riconoscere entrate simili")
 
                 # Mostra le prime 20
                 for idx, row in uncategorized.head(20).iterrows():
@@ -688,13 +690,23 @@ def show_categories_page():
                                 # Aggiorna categoria transazione
                                 db.update_transaction_category(row['id'], new_cat)
 
-                                # Impara associazione merchant -> categoria
-                                merchant = extract_merchant(row['description'])
-                                if merchant:
-                                    db.learn_merchant_category(merchant, new_cat)
-                                    st.success(f"✅ Salvato! L'app ricorderà **{merchant}** → {new_cat}")
+                                # Determina se è entrata o spesa
+                                income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso',
+                                                    'Sussidi', 'Investimenti', 'Altro Reddito']
+                                is_income = new_cat in income_categories
+
+                                if is_income:
+                                    # Per ENTRATE: salva pattern descrizione
+                                    db.save_income_pattern(row['description'], new_cat)
+                                    st.success(f"✅ Salvato! L'app ricorderà questo pattern → {new_cat}")
                                 else:
-                                    st.success("✅ Categoria aggiornata")
+                                    # Per SPESE: impara associazione merchant -> categoria
+                                    merchant = extract_merchant(row['description'])
+                                    if merchant:
+                                        db.learn_merchant_category(merchant, new_cat)
+                                        st.success(f"✅ Salvato! L'app ricorderà **{merchant}** → {new_cat}")
+                                    else:
+                                        st.success("✅ Categoria aggiornata")
 
                                 st.rerun()
 

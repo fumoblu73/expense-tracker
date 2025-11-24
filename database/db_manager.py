@@ -95,6 +95,17 @@ class ExpenseDB:
             )
         ''')
 
+        # Tabella apprendimento pattern entrate -> categoria
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS learned_income_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                description_pattern TEXT UNIQUE NOT NULL,
+                category TEXT NOT NULL,
+                learned_count INTEGER DEFAULT 1,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         conn.commit()
 
         # Aggiungi categorie predefinite se non esistono
@@ -429,3 +440,159 @@ class ExpenseDB:
             df = df[df['start_date'] <= current_date]
 
         return df
+
+    # ========== GESTIONE APPRENDIMENTO ENTRATE ==========
+
+    def normalize_income_description(self, description):
+        """
+        Normalizza descrizione entrata per pattern matching
+
+        Rimuove:
+        - Date variabili (mesi, anni, numeri di giorni)
+        - Numeri di riferimento lunghi
+        - Spazi multipli
+
+        Mantiene:
+        - Keywords principali (ente, tipo operazione)
+        - Parole significative
+
+        Args:
+            description: Descrizione originale
+
+        Returns:
+            Descrizione normalizzata
+        """
+        import re
+
+        if not description:
+            return ""
+
+        # Converti in lowercase
+        desc = str(description).lower().strip()
+
+        # Rimuovi date comuni: gen, feb, mar, 2024, 2025, ecc.
+        months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic',
+                  'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+                  'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre']
+        for month in months:
+            desc = re.sub(r'\b' + month + r'\b', '', desc)
+
+        # Rimuovi anni (2020-2099)
+        desc = re.sub(r'\b20[2-9][0-9]\b', '', desc)
+
+        # Rimuovi numeri di giorni standalone (01-31)
+        desc = re.sub(r'\b[0-3]?[0-9]\b(?![a-z])', '', desc)
+
+        # Rimuovi numeri di riferimento lunghi (più di 3 cifre consecutive)
+        desc = re.sub(r'\d{4,}', '', desc)
+
+        # Rimuovi punteggiatura eccessiva
+        desc = re.sub(r'[.,;:]+', ' ', desc)
+
+        # Normalizza spazi multipli
+        desc = re.sub(r'\s+', ' ', desc).strip()
+
+        return desc
+
+    def save_income_pattern(self, description, category):
+        """
+        Salva o aggiorna pattern appreso per entrate
+
+        Args:
+            description: Descrizione originale della transazione
+            category: Categoria assegnata dall'utente
+        """
+        # Normalizza descrizione
+        pattern = self.normalize_income_description(description)
+
+        if not pattern:
+            return  # Evita pattern vuoti
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Verifica se esiste già
+        cursor.execute("SELECT learned_count FROM learned_income_patterns WHERE description_pattern = ?", (pattern,))
+        result = cursor.fetchone()
+
+        if result:
+            # Aggiorna categoria e incrementa contatore
+            cursor.execute(
+                "UPDATE learned_income_patterns SET category = ?, learned_count = learned_count + 1, last_updated = CURRENT_TIMESTAMP WHERE description_pattern = ?",
+                (category, pattern)
+            )
+        else:
+            # Inserisci nuovo pattern
+            cursor.execute(
+                "INSERT INTO learned_income_patterns (description_pattern, category) VALUES (?, ?)",
+                (pattern, category)
+            )
+
+        conn.commit()
+        conn.close()
+
+    def get_learned_income_category(self, description):
+        """
+        Ottieni categoria appresa per una descrizione entrata
+
+        Usa matching parziale: cerca se il pattern appreso è contenuto nella descrizione
+
+        Args:
+            description: Descrizione della transazione
+
+        Returns:
+            Categoria appresa o None se non trovata
+        """
+        pattern = self.normalize_income_description(description)
+
+        if not pattern:
+            return None
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # Cerca match esatto prima
+        cursor.execute("SELECT category FROM learned_income_patterns WHERE description_pattern = ?", (pattern,))
+        result = cursor.fetchone()
+
+        if result:
+            conn.close()
+            return result[0]
+
+        # Se non trova match esatto, cerca pattern contenuti nella descrizione
+        # Ordina per lunghezza pattern (più lunghi = più specifici = priorità)
+        cursor.execute("""
+            SELECT category, description_pattern
+            FROM learned_income_patterns
+            ORDER BY LENGTH(description_pattern) DESC, learned_count DESC
+        """)
+
+        results = cursor.fetchall()
+        conn.close()
+
+        # Cerca il pattern più lungo che è contenuto nella descrizione
+        for category, learned_pattern in results:
+            # Controlla se tutte le parole del pattern sono nella descrizione
+            pattern_words = learned_pattern.split()
+            if all(word in pattern for word in pattern_words):
+                return category
+
+        return None
+
+    def get_all_learned_income_patterns(self):
+        """Ottieni tutti i pattern entrate appresi"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            "SELECT description_pattern, category, learned_count, last_updated FROM learned_income_patterns ORDER BY learned_count DESC",
+            conn
+        )
+        conn.close()
+        return df
+
+    def delete_learned_income_pattern(self, pattern):
+        """Elimina un pattern entrata appreso"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM learned_income_patterns WHERE description_pattern = ?", (pattern,))
+        conn.commit()
+        conn.close()

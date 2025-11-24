@@ -77,13 +77,14 @@ def clean_merchant_name(merchant):
     return merchant
 
 
-def auto_categorize_by_keywords(description, amount_sign=None):
+def auto_categorize_by_keywords(description, amount_sign=None, db=None):
     """
     Categorizza automaticamente basandosi su parole chiave
 
     Args:
         description: Descrizione transazione
         amount_sign: 'income' o 'expense' per identificare tipo transazione
+        db: Database manager (opzionale, per apprendimento entrate)
 
     Returns:
         Nome categoria suggerita
@@ -95,7 +96,7 @@ def auto_categorize_by_keywords(description, amount_sign=None):
 
     # PRIMA: Se è un'entrata, categorizza con categorie entrate specifiche
     if amount_sign == 'income':
-        return categorize_income(desc_lower)
+        return categorize_income(desc_lower, db=db)
 
     # Dizionario parole chiave -> categoria SPESE
     keywords = {
@@ -152,47 +153,59 @@ def auto_categorize_by_keywords(description, amount_sign=None):
     return 'Non Categorizzato'
 
 
-def categorize_income(description):
+def categorize_income(description, db=None):
     """
-    Categorizza specificamente le ENTRATE
+    Categorizza specificamente le ENTRATE con sistema di apprendimento
 
     Args:
         description: Descrizione transazione (già lowercase)
+        db: Database manager (opzionale, per apprendimento)
 
     Returns:
         Categoria entrata specifica
     """
-    # Categorie specifiche per ENTRATE
+    # PRIORITA' 1: Pattern appresi dall'utente (se db disponibile)
+    if db:
+        learned_category = db.get_learned_income_category(description)
+        if learned_category:
+            return learned_category
+
+    # PRIORITA' 2: Keyword matching con ordine specifico -> generico
+    # Categorie specifiche per ENTRATE (ordinate per specificità)
     income_keywords = {
-        'Stipendio': [
-            'stipendio', 'salario', 'busta paga', 'cedolino', 'retribuzione',
-            'compenso', 'paga', 'salary'
+        # SPECIFICHE PRIMA (multi-parola, più precise)
+        'Sussidi': [
+            'assegno unico', 'assegni familiari', 'inps assegno',
+            'cassa integrazione', 'disoccupazione', 'naspi',
+            'bonus', 'reddito di cittadinanza'
         ],
         'Pensione': [
-            'pensione', 'inps', 'inpdap', 'assegno pensione'
+            'pensione inps', 'pensione inpdap', 'assegno pensione',
+            'inpdap'  # Rimosso 'inps' generico
+        ],
+        'Stipendio': [
+            'busta paga', 'stipendio', 'salario', 'cedolino',
+            'retribuzione', 'compenso', 'paga', 'salary'
+        ],
+        'Investimenti': [
+            'dividendi', 'interessi', 'cedola', 'capital gain',
+            'plusvalenza', 'rendita', 'coupon'
+        ],
+        # GENERICHE DOPO (singole parole, meno precise)
+        'Rimborso': [
+            'rimborso', 'storno', 'reso', 'refund',
+            'restituzione', 'indennizzo', 'risarcimento'
         ],
         'Bonifico': [
             'bonifico', 'bon.', 'accredito bonifico', 'trasferimento',
             'wire transfer', 'sepa'
-        ],
-        'Rimborso': [
-            'rimborso', 'storno', 'reso', 'refund', 'restituzione',
-            'indennizzo', 'risarcimento'
-        ],
-        'Sussidi': [
-            'assegno unico', 'assegni familiari', 'bonus', 'reddito di cittadinanza',
-            'cassa integrazione', 'disoccupazione', 'naspi', 'inps assegno'
-        ],
-        'Investimenti': [
-            'dividendi', 'interessi', 'cedola', 'capital gain', 'plusvalenza',
-            'rendita', 'coupon'
         ],
         'Altro Reddito': [
             'vendita', 'prestazione', 'consulenza', 'fattura', 'incasso'
         ]
     }
 
-    # Cerca corrispondenza
+    # Cerca corrispondenza (ordine del dizionario mantiene priorità Python 3.7+)
     for category, words in income_keywords.items():
         if any(word in description for word in words):
             return category
@@ -235,7 +248,8 @@ def smart_categorize_transactions(df, db):
                 continue
 
         # Usa categorizzazione automatica (gestisce sia entrate che spese)
-        auto_cat = auto_categorize_by_keywords(description, amount_sign)
+        # Passa db per permettere apprendimento entrate
+        auto_cat = auto_categorize_by_keywords(description, amount_sign, db=db)
         categories.append(auto_cat)
 
     df['merchant'] = merchants
