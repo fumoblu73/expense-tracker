@@ -340,28 +340,29 @@ def show_dashboard():
 
         st.divider()
 
-    # Grafici principali
-    col1, col2 = st.columns(2)
+    # Grafici principali (nascondibili)
+    with st.expander("📊 Grafici Analisi", expanded=True):
+        col1, col2 = st.columns(2)
 
-    with col1:
-        fig_monthly = create_monthly_summary(transactions)
-        if fig_monthly:
-            st.plotly_chart(fig_monthly, use_container_width=True)
+        with col1:
+            fig_monthly = create_monthly_summary(transactions)
+            if fig_monthly:
+                st.plotly_chart(fig_monthly, use_container_width=True)
 
-    with col2:
-        fig_pie = create_category_pie(transactions, categories)
-        if fig_pie:
-            st.plotly_chart(fig_pie, use_container_width=True)
+        with col2:
+            fig_pie = create_category_pie(transactions, categories)
+            if fig_pie:
+                st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Budget comparison
-    fig_budget = create_budget_comparison(transactions, categories, current_month)
-    if fig_budget:
-        st.plotly_chart(fig_budget, use_container_width=True)
+        # Budget comparison
+        fig_budget = create_budget_comparison(transactions, categories, current_month)
+        if fig_budget:
+            st.plotly_chart(fig_budget, use_container_width=True)
 
-    # Trend giornaliero
-    fig_daily = create_daily_spending_trend(transactions, days=30)
-    if fig_daily:
-        st.plotly_chart(fig_daily, use_container_width=True)
+        # Trend giornaliero
+        fig_daily = create_daily_spending_trend(transactions, days=30)
+        if fig_daily:
+            st.plotly_chart(fig_daily, use_container_width=True)
 
     # Top spese
     st.subheader("💸 Top 10 Spese del Mese")
