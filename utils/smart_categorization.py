@@ -77,13 +77,13 @@ def clean_merchant_name(merchant):
     return merchant
 
 
-def auto_categorize_by_keywords(description, amount=None):
+def auto_categorize_by_keywords(description, amount_sign=None):
     """
     Categorizza automaticamente basandosi su parole chiave
 
     Args:
         description: Descrizione transazione
-        amount: Importo (opzionale, per identificare entrate)
+        amount_sign: 'income' o 'expense' per identificare tipo transazione
 
     Returns:
         Nome categoria suggerita
@@ -93,11 +93,11 @@ def auto_categorize_by_keywords(description, amount=None):
 
     desc_lower = str(description).lower()
 
-    # Se l'importo è positivo -> Entrate
-    if amount and amount > 0:
-        return 'Entrate'
+    # PRIMA: Se è un'entrata, categorizza con categorie entrate specifiche
+    if amount_sign == 'income':
+        return categorize_income(desc_lower)
 
-    # Dizionario parole chiave -> categoria
+    # Dizionario parole chiave -> categoria SPESE
     keywords = {
         'Alimentari': [
             'todis', 'conad', 'coop', 'esselunga', 'carrefour', 'lidl', 'eurospin',
@@ -141,11 +141,6 @@ def auto_categorize_by_keywords(description, amount=None):
             'palestra', 'piscina', 'sport', 'calcio', 'tennis',
             'spa', 'terme', 'massaggio', 'parrucchiere', 'barbiere',
             'estetista', 'centro estetico'
-        ],
-        'Entrate': [
-            'stipendio', 'pensione', 'bonifico da', 'accredito',
-            'rimborso', 'inps', 'assegno unico', 'assegni familiari',
-            'cassa integrazione', 'disoccupazione'
         ]
     }
 
@@ -155,6 +150,55 @@ def auto_categorize_by_keywords(description, amount=None):
             return category
 
     return 'Non Categorizzato'
+
+
+def categorize_income(description):
+    """
+    Categorizza specificamente le ENTRATE
+
+    Args:
+        description: Descrizione transazione (già lowercase)
+
+    Returns:
+        Categoria entrata specifica
+    """
+    # Categorie specifiche per ENTRATE
+    income_keywords = {
+        'Stipendio': [
+            'stipendio', 'salario', 'busta paga', 'cedolino', 'retribuzione',
+            'compenso', 'paga', 'salary'
+        ],
+        'Pensione': [
+            'pensione', 'inps', 'inpdap', 'assegno pensione'
+        ],
+        'Bonifico': [
+            'bonifico', 'bon.', 'accredito bonifico', 'trasferimento',
+            'wire transfer', 'sepa'
+        ],
+        'Rimborso': [
+            'rimborso', 'storno', 'reso', 'refund', 'restituzione',
+            'indennizzo', 'risarcimento'
+        ],
+        'Sussidi': [
+            'assegno unico', 'assegni familiari', 'bonus', 'reddito di cittadinanza',
+            'cassa integrazione', 'disoccupazione', 'naspi', 'inps assegno'
+        ],
+        'Investimenti': [
+            'dividendi', 'interessi', 'cedola', 'capital gain', 'plusvalenza',
+            'rendita', 'coupon'
+        ],
+        'Altro Reddito': [
+            'vendita', 'prestazione', 'consulenza', 'fattura', 'incasso'
+        ]
+    }
+
+    # Cerca corrispondenza
+    for category, words in income_keywords.items():
+        if any(word in description for word in words):
+            return category
+
+    # Default per entrate non riconosciute
+    return 'Altro Reddito'
 
 
 import pandas as pd
@@ -183,20 +227,15 @@ def smart_categorize_transactions(df, db):
         merchant = extract_merchant(description)
         merchants.append(merchant)
 
-        # Se è un'entrata (positivo), categorizza come "Entrate"
-        if amount_sign == 'income':
-            categories.append('Entrate')
-            continue
-
-        # Prova a recuperare categoria appresa
-        if merchant:
+        # Prova a recuperare categoria appresa (per SPESE)
+        if amount_sign == 'expense' and merchant:
             learned_cat = db.get_learned_category(merchant)
             if learned_cat:
                 categories.append(learned_cat)
                 continue
 
-        # Altrimenti usa categorizzazione automatica
-        auto_cat = auto_categorize_by_keywords(description, amount)
+        # Usa categorizzazione automatica (gestisce sia entrate che spese)
+        auto_cat = auto_categorize_by_keywords(description, amount_sign)
         categories.append(auto_cat)
 
     df['merchant'] = merchants

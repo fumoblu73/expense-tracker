@@ -144,13 +144,19 @@ def detect_columns(df):
     columns_lower = {col: col.lower() for col in df.columns}
 
     # Cerca colonna data
+    # PRIORITÀ: "Data Valuta" è più affidabile di "Data Contabile"
     date_keywords = [
-        'data', 'date', 'fecha', 'datum',
-        'data operazione', 'data valuta', 'data contabile'
+        'data valuta',  # PRIORITÀ 1: Data effettiva transazione
+        'data contabile',  # PRIORITÀ 2: Data registrazione contabile
+        'data operazione',  # PRIORITÀ 3: Data operazione
+        'data', 'date', 'fecha', 'datum'  # Generici
     ]
-    for col, col_lower in columns_lower.items():
-        if any(keyword in col_lower for keyword in date_keywords):
-            mapping['date'] = col
+    for keyword in date_keywords:
+        for col, col_lower in columns_lower.items():
+            if keyword in col_lower:
+                mapping['date'] = col
+                break
+        if 'date' in mapping:  # Se trovata, esci
             break
 
     # Cerca colonna importo
@@ -208,35 +214,48 @@ def parse_dates(date_series, date_format='auto'):
 
 
 def parse_amounts(amount_series):
-    """Parse importi gestendo formati italiani"""
-    # Se è già numerico, restituisci (mantieni il segno!)
-    if pd.api.types.is_numeric_dtype(amount_series):
-        return pd.to_numeric(amount_series, errors='coerce')
+    """
+    Parse importi gestendo formati italiani
 
-    # Converti in stringa
+    IMPORTANTE: Gestisce correttamente valori con virgola decimale italiana
+    Esempio: "-19,99" → -19.99 (NON -1999!)
+    """
+    # PRIMA converti TUTTO in stringa, anche se già numerico
+    # Questo è necessario perché pandas/HTML potrebbero aver già letto i valori
     amount_series = amount_series.astype(str)
 
     # Rimuovi spazi
     amount_series = amount_series.str.strip()
 
-    # Gestisci formato italiano: la virgola è SEMPRE decimale, il punto è SEMPRE migliaia
-    # Esempio: -18,30 o -1.234,56
-    # Strategia:
-    # 1. Se c'è virgola → è decimale italiano → rimuovi punti migliaia, sostituisci virgola con punto
-    # 2. Se NO virgola ma c'è punto → potrebbe essere sia inglese (18.30) che migliaia (1.000)
-    #    Per distinguere: se ci sono più di 2 cifre dopo il punto, è migliaia
-
     def convert_italian_amount(val):
+        """
+        Converte importo italiano in float
+
+        Casi gestiti:
+        - "-19,99" → -19.99
+        - "-1.234,56" → -1234.56
+        - "18,30" → 18.30
+        - "-19.99" (già formato US) → -19.99
+        - nan, None → nan
+        """
         val = str(val).strip()
+
+        # Gestisci valori nulli
+        if val in ['nan', 'None', '', 'NaN']:
+            return None
+
         # Rimuovi simboli valuta
         val = val.replace('€', '').replace('EUR', '').strip()
 
+        # Caso 1: Formato italiano con virgola (es: "-19,99" o "-1.234,56")
         if ',' in val:
-            # Formato italiano: virgola = decimale, punto = migliaia
-            # -1.234,56 -> -1234.56
-            val = val.replace('.', '')  # Rimuovi migliaia
+            # La virgola è SEMPRE il separatore decimale in formato italiano
+            # Il punto (se presente) è SEMPRE il separatore migliaia
+            val = val.replace('.', '')  # Rimuovi separatori migliaia
             val = val.replace(',', '.')  # Virgola diventa punto decimale
-        # Altrimenti mantieni com'è (formato già corretto o solo cifre)
+
+        # Caso 2: Già in formato corretto (punto decimale) o solo numero intero
+        # Non fare nulla, mantieni com'è
 
         return val
 

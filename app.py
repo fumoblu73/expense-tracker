@@ -368,13 +368,16 @@ def show_dashboard():
     # Top spese
     st.subheader("💸 Top 10 Spese del Mese")
 
+    # Categorie che sono ENTRATE
+    income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
+
     # Conta entrate vs spese
-    income_count = len(month_transactions[month_transactions['category'] == 'Entrate'])
-    expense_count = len(month_transactions[month_transactions['category'] != 'Entrate'])
+    income_count = len(month_transactions[month_transactions['category'].isin(income_categories)])
+    expense_count = len(month_transactions[~month_transactions['category'].isin(income_categories)])
 
     if income_count > 0 and expense_count == 0:
         st.info(f"""
-        📊 **Nota**: Questo mese sono state registrate solo **{income_count} entrate** (bonifici, rimborsi, stipendi).
+        📊 **Nota**: Questo mese sono state registrate solo **{income_count} entrate** (bonifici, rimborsi, stipendi, pensioni).
 
         Per vedere le categorie di spesa (Alimentari, Utenze, Trasporti, ecc.), importa un file che contenga anche le **uscite/spese**.
 

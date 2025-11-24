@@ -36,9 +36,12 @@ def detect_anomalies(transactions, lookback_months=3, threshold_std=2.0):
 
     anomalies = []
 
+    # Categorie che sono ENTRATE (da escludere dall'analisi spese)
+    income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso', 'Sussidi', 'Investimenti', 'Altro Reddito']
+
     # Analisi per categoria
     for category in recent_trans['category'].unique():
-        if category in ['Entrate', 'Non Categorizzato']:
+        if category in income_categories or category == 'Non Categorizzato':
             continue
 
         cat_trans = recent_trans[recent_trans['category'] == category]
