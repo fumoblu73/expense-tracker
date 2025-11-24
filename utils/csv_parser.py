@@ -60,25 +60,28 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
                     uploaded_file.seek(0)
                     df = pd.read_csv(uploaded_file, encoding='iso-8859-1', sep=';')
 
+        # Pulisci i nomi delle colonne (rimuovi spazi extra)
+        df.columns = df.columns.str.strip()
+
         # Auto-detect colonne
         column_mapping = detect_columns(df)
-
-        # DEBUG: Mostra sempre le colonne trovate
-        st.info("📋 **Debug - Colonne trovate nel file:**")
-        for col in df.columns.tolist():
-            st.write(f"  - `{col}`")
-        st.info("📋 **Debug - Mapping rilevato:**")
-        for key, val in column_mapping.items():
-            st.write(f"  - {key} → `{val}`")
 
         # Valida che ci siano le colonne necessarie
         if not all(k in column_mapping for k in ['date', 'amount', 'description']):
             st.error("⚠️ Il file non contiene tutte le colonne necessarie")
+            st.info("📋 **Colonne trovate:**")
+            for col in df.columns.tolist():
+                st.write(f"  - `{col}`")
+            st.info("📋 **Mapping rilevato:**")
+            for key, val in column_mapping.items():
+                st.write(f"  - {key} → `{val}`")
             st.warning("💡 Assicurati che il file contenga almeno: Data, Importo, Descrizione")
             return None
 
-        # Standardizza nomi colonne
-        df = df.rename(columns=column_mapping)
+        # Standardizza nomi colonne usando il mapping rilevato
+        # Crea reverse mapping per rinominare correttamente
+        reverse_mapping = {v: k for k, v in column_mapping.items()}
+        df = df.rename(columns=reverse_mapping)
 
         # Seleziona solo le colonne che ci servono
         columns_to_keep = ['date', 'description', 'amount']
