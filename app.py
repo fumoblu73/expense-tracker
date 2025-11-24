@@ -18,6 +18,7 @@ sys.path.append(str(Path(__file__).parent))
 from database.db_manager import ExpenseDB
 from utils.csv_parser import parse_bank_csv, validate_csv_preview, get_sample_csv_template
 from utils.smart_categorization import smart_categorize_transactions, extract_merchant
+from utils.backup_manager import create_full_backup, extract_backup_info, restore_backup, get_backup_filename
 from utils.visualizations import (
     create_monthly_summary,
     create_category_pie,
@@ -129,6 +130,7 @@ def main():
                 "🏠 Dashboard",
                 "📤 Carica Dati",
                 "🏷️ Gestisci Categorie",
+                "💳 Spese Ricorrenti",
                 "📊 Report & Analisi",
                 "🔮 Previsioni",
                 "⚙️ Impostazioni"
@@ -156,6 +158,8 @@ def main():
         show_upload_page()
     elif "Categorie" in page:
         show_categories_page()
+    elif "Ricorrenti" in page:
+        show_recurring_expenses_page()
     elif "Report" in page:
         show_reports_page()
     elif "Previsioni" in page:
@@ -339,6 +343,26 @@ def show_upload_page():
                             else:
                                 st.success(f"✅ {saved_count} transazioni salvate con successo!")
                                 st.balloons()
+
+                            # Promemoria backup dopo import
+                            if saved_count > 0:
+                                st.divider()
+                                st.info("""
+                                💾 **Promemoria Importante: Backup dei Dati**
+
+                                Hai appena importato nuove transazioni! Per proteggere i tuoi dati:
+                                1. Vai su **⚙️ Impostazioni** → **Backup & Ripristino**
+                                2. Scarica un backup completo (ZIP)
+                                3. Salvalo su Dropbox, Google Drive o disco locale
+
+                                ⚠️ I dati su Streamlit Cloud potrebbero essere persi durante un redeploy!
+                                """)
+
+                                col1, col2, col3 = st.columns([1, 1, 1])
+                                with col2:
+                                    if st.button("📥 Vai a Backup Ora", use_container_width=True, type="secondary"):
+                                        st.session_state['page'] = "⚙️ Impostazioni"
+                                        st.rerun()
 
                             # Suggerisci di categorizzare se ci sono nuove transazioni
                             if saved_count > 0 and not auto_categorize:
@@ -542,6 +566,149 @@ def show_categories_page():
                     st.rerun()
         else:
             st.info("Nessun merchant memorizzato ancora. Inizia a categorizzare le transazioni!")
+
+
+def show_recurring_expenses_page():
+    """Pagina gestione spese ricorrenti"""
+    st.title("💳 Spese Ricorrenti")
+
+    st.info("""
+    📋 **Gestisci le tue spese ricorrenti**
+
+    Aggiungi spese che si ripetono regolarmente (mutuo, abbonamenti, bollette) per:
+    - Monitorare i pagamenti mensili
+    - Calcolare automaticamente il budget disponibile
+    - Ricevere promemoria per spese in scadenza
+    """)
+
+    categories = db.get_categories()
+    recurring = db.get_recurring_expenses(active_only=False)
+
+    tabs = st.tabs(["📋 Lista Ricorrenti", "➕ Aggiungi Nuova"])
+
+    with tabs[0]:
+        st.subheader("📋 Le Tue Spese Ricorrenti")
+
+        if len(recurring) == 0:
+            st.warning("Non hai ancora aggiunto spese ricorrenti.")
+            st.info("💡 Vai su **➕ Aggiungi Nuova** per creare la tua prima spesa ricorrente!")
+        else:
+            # Filtro attive/tutte
+            show_filter = st.radio(
+                "Mostra",
+                options=["Attive", "Tutte"],
+                horizontal=True
+            )
+
+            if show_filter == "Attive":
+                recurring_filtered = recurring[recurring['active'] == 1]
+            else:
+                recurring_filtered = recurring
+
+            if len(recurring_filtered) == 0:
+                st.info("Nessuna spesa ricorrente attiva")
+            else:
+                # Mostra tabella
+                for idx, row in recurring_filtered.iterrows():
+                    with st.container():
+                        col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 1, 1])
+
+                        with col1:
+                            status_icon = "🟢" if row['active'] else "🔴"
+                            st.write(f"{status_icon} **{row['name']}**")
+                            st.caption(f"Categoria: {row['category']}")
+
+                        with col2:
+                            st.metric("Importo", f"€{row['amount']:,.2f}")
+
+                        with col3:
+                            freq_map = {'mensile': '📅 Mensile', 'settimanale': '📆 Settimanale', 'annuale': '📆 Annuale'}
+                            st.write(freq_map.get(row['frequency'], row['frequency']))
+                            if row['frequency'] == 'mensile':
+                                st.caption(f"Giorno: {row['day_of_period']}")
+
+                        with col4:
+                            # Toggle attiva/disattiva
+                            new_status = st.toggle("", value=bool(row['active']), key=f"toggle_{row['id']}", label_visibility="collapsed")
+                            if new_status != bool(row['active']):
+                                db.toggle_recurring_expense(row['id'], new_status)
+                                st.rerun()
+
+                        with col5:
+                            # Elimina
+                            if st.button("🗑️", key=f"del_{row['id']}", help="Elimina"):
+                                db.delete_recurring_expense(row['id'])
+                                st.success(f"Eliminata: {row['name']}")
+                                st.rerun()
+
+                        # Mostra note se presenti
+                        if row['notes']:
+                            st.caption(f"📝 {row['notes']}")
+
+                        st.divider()
+
+                # Statistiche
+                active_recurring = recurring[recurring['active'] == 1]
+                if len(active_recurring) > 0:
+                    st.subheader("📊 Riepilogo Spese Ricorrenti")
+
+                    total_monthly = 0
+                    for _, row in active_recurring.iterrows():
+                        if row['frequency'] == 'mensile':
+                            total_monthly += row['amount']
+                        elif row['frequency'] == 'annuale':
+                            total_monthly += row['amount'] / 12
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("💰 Totale Mensile Ricorrenti", f"€{total_monthly:,.2f}")
+                    with col2:
+                        st.metric("📊 Ricorrenti Attive", len(active_recurring))
+
+    with tabs[1]:
+        st.subheader("➕ Aggiungi Nuova Spesa Ricorrente")
+
+        with st.form("add_recurring"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                name = st.text_input("Nome Spesa *", placeholder="es. Mutuo, Netflix, Bolletta luce")
+                category = st.selectbox("Categoria *", options=categories['name'].tolist())
+                amount = st.number_input("Importo (€) *", min_value=0.01, step=0.01, format="%.2f")
+
+            with col2:
+                frequency = st.selectbox("Frequenza *", options=['mensile', 'settimanale', 'annuale'])
+
+                if frequency == 'mensile':
+                    day_of_period = st.number_input("Giorno del Mese", min_value=1, max_value=31, value=1)
+                elif frequency == 'settimanale':
+                    day_of_period = st.selectbox("Giorno della Settimana", options=[1, 2, 3, 4, 5, 6, 7],
+                                                format_func=lambda x: ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'][x-1])
+                else:
+                    day_of_period = 1  # Per annuale non serve
+
+                start_date = st.date_input("Data Inizio *", value=datetime.now())
+
+            notes = st.text_area("Note (opzionale)", placeholder="Aggiungi dettagli aggiuntivi...")
+
+            submitted = st.form_submit_button("💾 Salva Spesa Ricorrente", use_container_width=True, type="primary")
+
+            if submitted:
+                if not name or amount <= 0:
+                    st.error("⚠️ Compila tutti i campi obbligatori!")
+                else:
+                    db.add_recurring_expense(
+                        name=name,
+                        category=category,
+                        amount=amount,
+                        frequency=frequency,
+                        day_of_period=day_of_period,
+                        start_date=start_date.strftime('%Y-%m-%d'),
+                        notes=notes
+                    )
+                    st.success(f"✅ Spesa ricorrente '{name}' aggiunta con successo!")
+                    st.balloons()
+                    st.rerun()
 
 
 def show_reports_page():
@@ -752,28 +919,137 @@ def show_settings_page():
     """Pagina impostazioni"""
     st.title("⚙️ Impostazioni")
 
-    tabs = st.tabs(["📧 Email", "💾 Database", "ℹ️ Informazioni"])
+    tabs = st.tabs(["💾 Backup & Ripristino", "📧 Email", "🗑️ Database", "ℹ️ Informazioni"])
 
     with tabs[0]:
-        configure_email_settings()
-
-    with tabs[1]:
-        st.subheader("💾 Gestione Database")
+        st.subheader("💾 Backup & Ripristino")
 
         transactions = db.get_all_transactions()
+        categories = db.get_categories()
 
-        st.info(f"📊 Database contiene **{len(transactions)}** transazioni")
+        # Sezione Backup
+        st.markdown("### 📥 Crea Backup Completo")
 
-        # Backup
+        st.info(f"""
+        📊 **Contenuto Database:**
+        - {len(transactions)} transazioni
+        - {len(categories)} categorie
+        - Merchant appresi e impostazioni
+
+        Il backup include TUTTI i tuoi dati in formato ZIP sicuro.
+        """)
+
         if len(transactions) > 0:
-            csv_backup = transactions.to_csv(index=False)
-            st.download_button(
-                "📥 Scarica Backup Database (CSV)",
-                csv_backup,
-                f"backup_spese_{datetime.now().strftime('%Y%m%d')}.csv",
-                "text/csv",
-                use_container_width=True
-            )
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Backup completo ZIP
+                if st.button("📦 Scarica Backup Completo (ZIP)", use_container_width=True, type="primary"):
+                    with st.spinner("Creazione backup in corso..."):
+                        zip_buffer = create_full_backup(db.db_path)
+
+                        st.download_button(
+                            "⬇️ Download Backup ZIP",
+                            zip_buffer,
+                            get_backup_filename(),
+                            "application/zip",
+                            use_container_width=True
+                        )
+                        st.success("✅ Backup pronto! Salvalo su Dropbox, Drive o disco locale")
+
+                        # Salva timestamp ultimo backup
+                        st.session_state['last_backup'] = datetime.now()
+
+            with col2:
+                # Backup CSV semplice (legacy)
+                csv_backup = transactions.to_csv(index=False)
+                st.download_button(
+                    "📄 Backup Solo Transazioni (CSV)",
+                    csv_backup,
+                    f"backup_spese_{datetime.now().strftime('%Y%m%d')}.csv",
+                    "text/csv",
+                    use_container_width=True,
+                    help="Solo transazioni, senza categorie e impostazioni"
+                )
+
+        st.divider()
+
+        # Sezione Ripristino
+        st.markdown("### ⬆️ Ripristina da Backup")
+
+        st.warning("""
+        ⚠️ **Attenzione**: Il ripristino sovrascriverà i dati esistenti.
+        Scarica un backup prima di procedere!
+        """)
+
+        uploaded_backup = st.file_uploader(
+            "Carica file backup (ZIP)",
+            type=['zip'],
+            help="Seleziona il file backup.zip scaricato precedentemente"
+        )
+
+        if uploaded_backup:
+            # Mostra info sul backup
+            backup_info = extract_backup_info(uploaded_backup)
+
+            if backup_info:
+                st.success("✅ Backup valido trovato!")
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.metric("📅 Data Backup", backup_info['metadata'].get('backup_date', 'N/A')[:10])
+                    st.metric("📊 Transazioni", backup_info['files'].get('transactions', 0))
+
+                with col2:
+                    st.metric("🏷️ Categorie", backup_info['files'].get('categories', 0))
+                    st.metric("🏪 Merchant", backup_info['files'].get('merchants', 0))
+
+                st.divider()
+
+                # Scegli modalità ripristino
+                restore_mode = st.radio(
+                    "Modalità Ripristino",
+                    options=['replace', 'merge'],
+                    format_func=lambda x: "🔄 Sostituisci Tutto (cancella DB e ripristina)" if x == 'replace' else "➕ Aggiungi Solo Nuovi Dati (merge intelligente)",
+                    help="Replace: cancella tutto e ripristina dal backup. Merge: aggiunge solo dati nuovi, evita duplicati."
+                )
+
+                # Conferma ripristino
+                if restore_mode == 'replace':
+                    confirm_text = st.text_input("⚠️ Scrivi 'RIPRISTINA' per confermare la sostituzione completa")
+                    confirm_ok = confirm_text == 'RIPRISTINA'
+                else:
+                    confirm_ok = True
+
+                if st.button("⬆️ Avvia Ripristino", type="primary", disabled=not confirm_ok):
+                    with st.spinner("Ripristino in corso..."):
+                        # Reset uploaded file position
+                        uploaded_backup.seek(0)
+                        stats = restore_backup(uploaded_backup, db.db_path, mode=restore_mode)
+
+                        if stats:
+                            st.success("✅ Ripristino completato con successo!")
+                            st.balloons()
+
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Transazioni", f"+{stats['transactions']}")
+                            with col2:
+                                st.metric("Categorie", f"+{stats['categories']}")
+                            with col3:
+                                st.metric("Merchant", f"+{stats['merchants']}")
+
+                            st.info("🔄 Ricarica la pagina per vedere i dati ripristinati")
+
+    with tabs[1]:
+        configure_email_settings()
+
+    with tabs[2]:
+        st.subheader("🗑️ Gestione Database")
+
+        transactions = db.get_all_transactions()
+        st.info(f"📊 Database contiene **{len(transactions)}** transazioni")
 
         st.divider()
 

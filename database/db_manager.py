@@ -77,6 +77,24 @@ class ExpenseDB:
             )
         ''')
 
+        # Tabella spese ricorrenti
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS recurring_expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                amount REAL NOT NULL,
+                frequency TEXT NOT NULL CHECK(frequency IN ('mensile', 'settimanale', 'annuale')),
+                day_of_period INTEGER,
+                start_date DATE NOT NULL,
+                active BOOLEAN DEFAULT 1,
+                last_generated DATE,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (category) REFERENCES categories(name)
+            )
+        ''')
+
         conn.commit()
 
         # Aggiungi categorie predefinite se non esistono
@@ -335,3 +353,79 @@ class ExpenseDB:
         cursor.execute("DELETE FROM merchant_categories WHERE merchant = ?", (merchant,))
         conn.commit()
         conn.close()
+
+    # ========== GESTIONE SPESE RICORRENTI ==========
+
+    def add_recurring_expense(self, name, category, amount, frequency, day_of_period, start_date, notes=''):
+        """Aggiunge una nuova spesa ricorrente"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO recurring_expenses (name, category, amount, frequency, day_of_period, start_date, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (name, category, amount, frequency, day_of_period, start_date, notes))
+        conn.commit()
+        conn.close()
+
+    def get_recurring_expenses(self, active_only=True):
+        """Recupera tutte le spese ricorrenti"""
+        conn = sqlite3.connect(self.db_path)
+        query = "SELECT * FROM recurring_expenses"
+        if active_only:
+            query += " WHERE active = 1"
+        query += " ORDER BY name"
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        return df
+
+    def get_recurring_expense_by_id(self, rec_id):
+        """Recupera una spesa ricorrente specifica"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query("SELECT * FROM recurring_expenses WHERE id = ?", conn, params=(rec_id,))
+        conn.close()
+        return df.iloc[0] if len(df) > 0 else None
+
+    def update_recurring_expense(self, rec_id, name, category, amount, frequency, day_of_period, start_date, notes=''):
+        """Aggiorna una spesa ricorrente"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE recurring_expenses
+            SET name = ?, category = ?, amount = ?, frequency = ?, day_of_period = ?, start_date = ?, notes = ?
+            WHERE id = ?
+        ''', (name, category, amount, frequency, day_of_period, start_date, notes, rec_id))
+        conn.commit()
+        conn.close()
+
+    def toggle_recurring_expense(self, rec_id, active):
+        """Attiva/disattiva una spesa ricorrente"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE recurring_expenses SET active = ? WHERE id = ?", (1 if active else 0, rec_id))
+        conn.commit()
+        conn.close()
+
+    def delete_recurring_expense(self, rec_id):
+        """Elimina una spesa ricorrente"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM recurring_expenses WHERE id = ?", (rec_id,))
+        conn.commit()
+        conn.close()
+
+    def get_recurring_expenses_for_month(self, year, month):
+        """Recupera le spese ricorrenti previste per un dato mese"""
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query('''
+            SELECT * FROM recurring_expenses
+            WHERE active = 1 AND (frequency = 'mensile' OR frequency = 'annuale')
+        ''', conn)
+        conn.close()
+
+        # Filtra solo le ricorrenti applicabili al mese richiesto
+        if len(df) > 0:
+            df['start_date'] = pd.to_datetime(df['start_date'])
+            current_date = pd.to_datetime(f"{year}-{month:02d}-01")
+            df = df[df['start_date'] <= current_date]
+
+        return df
