@@ -21,6 +21,7 @@ from utils.smart_categorization import smart_categorize_transactions, extract_me
 from utils.backup_manager import create_full_backup, extract_backup_info, restore_backup, get_backup_filename
 from utils.recurring_utils import calculate_available_balance, get_recurring_status_for_month
 from utils.anomaly_detection import get_anomaly_summary
+from utils.formatters import format_currency_ita
 from utils.visualizations import (
     create_monthly_summary,
     create_category_pie,
@@ -146,7 +147,7 @@ def main():
         transactions = db.get_all_transactions()
         if len(transactions) > 0:
             st.metric("Totale Transazioni", len(transactions))
-            st.metric("Spesa Totale", f"€{transactions['amount'].sum():,.2f}")
+            st.metric("Spesa Totale", format_currency_ita(transactions['amount'].sum()))
 
             # Ultima transazione
             transactions['date'] = pd.to_datetime(transactions['date'])
@@ -196,7 +197,7 @@ def show_dashboard():
 
     with col1:
         total_month = month_transactions['amount'].sum()
-        st.metric("Spesa Mese Corrente", f"€{total_month:,.2f}")
+        st.metric("Spesa Mese Corrente", format_currency_ita(total_month))
 
     with col2:
         count_month = len(month_transactions)
@@ -204,12 +205,12 @@ def show_dashboard():
 
     with col3:
         avg_transaction = month_transactions['amount'].mean() if len(month_transactions) > 0 else 0
-        st.metric("Media Transazione", f"€{avg_transaction:,.2f}")
+        st.metric("Media Transazione", format_currency_ita(avg_transaction))
 
     with col4:
         days_in_month = datetime.now().day
         daily_avg = total_month / days_in_month if days_in_month > 0 else 0
-        st.metric("Media Giornaliera", f"€{daily_avg:,.2f}")
+        st.metric("Media Giornaliera", format_currency_ita(daily_avg))
 
     st.divider()
 
@@ -240,20 +241,20 @@ def show_dashboard():
 
         st.metric(
             f"{color} Disponibile per {balance_info['days_remaining']} giorni",
-            f"€{balance_info['available']:,.2f}",
+            format_currency_ita(balance_info['available']),
             f"{status_text}"
         )
 
         # Dettaglio
         with st.expander("📊 Dettaglio Calcolo"):
-            st.write(f"**Budget Totale**: €{balance_info['total_budget']:,.2f}")
-            st.write(f"**Speso fino ad oggi**: -€{balance_info['spent']:,.2f}")
-            st.write(f"**Spese ricorrenti da pagare**: -€{balance_info['recurring_pending']:,.2f}")
+            st.write(f"**Budget Totale**: {format_currency_ita(balance_info['total_budget'])}")
+            st.write(f"**Speso fino ad oggi**: -{format_currency_ita(balance_info['spent'])}")
+            st.write(f"**Spese ricorrenti da pagare**: -{format_currency_ita(balance_info['recurring_pending'])}")
             st.write("─" * 40)
-            st.write(f"**Disponibile**: €{balance_info['available']:,.2f}")
+            st.write(f"**Disponibile**: {format_currency_ita(balance_info['available'])}")
 
             if balance_info['days_remaining'] > 0:
-                st.info(f"💡 Puoi spendere **€{balance_info['daily_allowance']:,.2f}** al giorno per i prossimi **{balance_info['days_remaining']} giorni**")
+                st.info(f"💡 Puoi spendere **{format_currency_ita(balance_info['daily_allowance'])}** al giorno per i prossimi **{balance_info['days_remaining']} giorni**")
 
     with col2:
         # Spese Ricorrenti
@@ -273,7 +274,7 @@ def show_dashboard():
                 elif rec['frequency'] == 'annuale':
                     total_recurring += rec['amount'] / 12
 
-            st.metric("Totale Mensile", f"€{total_recurring:,.2f}")
+            st.metric("Totale Mensile", format_currency_ita(total_recurring))
 
             # Status ricorrenti
             recurring_status = get_recurring_status_for_month(transactions, recurring)
@@ -320,8 +321,8 @@ def show_dashboard():
                         st.caption(f"Data: {row['date'].strftime('%d/%m/%Y')}")
 
                     with col2:
-                        st.metric("Importo", f"€{row['amount']:,.2f}")
-                        st.caption(f"Media: €{row['mean_amount']:,.2f}")
+                        st.metric("Importo", format_currency_ita(row['amount']))
+                        st.caption(f"Media: {format_currency_ita(row['mean_amount'])}")
 
                     with col3:
                         st.write(f"**+{row['deviation_pct']:.0f}%**")
@@ -335,7 +336,7 @@ def show_dashboard():
                 st.subheader("🔄 Merchant con Frequenza Insolita")
 
                 for idx, row in anomaly_summary['frequency_anomalies'].head(3).iterrows():
-                    st.write(f"**{row['merchant']}**: {row['transaction_count']} transazioni (€{row['total_amount']:,.2f} totale)")
+                    st.write(f"**{row['merchant']}**: {row['transaction_count']} transazioni ({format_currency_ita(row['total_amount'])} totale)")
                     st.caption(row['explanation'])
 
         st.divider()
@@ -543,7 +544,7 @@ def show_categories_page():
                         st.markdown(f"**{cat['name']}**")
 
                     with col3:
-                        st.markdown(f"Budget: **€{cat['budget']:,.2f}**/mese")
+                        st.markdown(f"Budget: **{format_currency_ita(cat['budget'])}**/mese")
 
                     with col4:
                         if st.button("🗑️", key=f"del_{cat['name']}", help="Elimina categoria"):
@@ -627,7 +628,7 @@ def show_categories_page():
                             merchant = extract_merchant(row['description'])
                             if merchant:
                                 st.caption(f"🏪 Merchant: **{merchant}**")
-                            st.caption(f"{row['date']} - €{row['amount']:,.2f}")
+                            st.caption(f"{row['date']} - {format_currency_ita(row['amount'])}")
 
                         with col2:
                             new_cat = st.selectbox(
@@ -740,7 +741,7 @@ def show_recurring_expenses_page():
                             st.caption(f"Categoria: {row['category']}")
 
                         with col2:
-                            st.metric("Importo", f"€{row['amount']:,.2f}")
+                            st.metric("Importo", format_currency_ita(row['amount']))
 
                         with col3:
                             freq_map = {'mensile': '📅 Mensile', 'settimanale': '📆 Settimanale', 'annuale': '📆 Annuale'}
@@ -782,7 +783,7 @@ def show_recurring_expenses_page():
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.metric("💰 Totale Mensile Ricorrenti", f"€{total_monthly:,.2f}")
+                        st.metric("💰 Totale Mensile Ricorrenti", format_currency_ita(total_monthly))
                     with col2:
                         st.metric("📊 Ricorrenti Attive", len(active_recurring))
 
@@ -877,7 +878,7 @@ def show_reports_page():
         st.subheader("📋 Dettaglio Transazioni")
         display_df = month_data[['date', 'description', 'category', 'amount']].copy()
         display_df['date'] = display_df['date'].dt.strftime('%d/%m/%Y')
-        display_df['amount'] = display_df['amount'].apply(lambda x: f"€{x:,.2f}")
+        display_df['amount'] = display_df['amount'].apply(format_currency_ita)
         display_df.columns = ['Data', 'Descrizione', 'Categoria', 'Importo']
 
         st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -943,7 +944,7 @@ def show_reports_page():
                     top_cats = month_data.groupby('category')['amount'].sum().sort_values(ascending=False).head(5)
                     top_cats_html = "<div>"
                     for cat, amount in top_cats.items():
-                        top_cats_html += f'<div class="category-item"><span>{cat}</span><span>€{amount:,.2f}</span></div>'
+                        top_cats_html += f'<div class="category-item"><span>{cat}</span><span>{format_currency_ita(amount)}</span></div>'
                     top_cats_html += "</div>"
 
                     alerts = check_budget_alerts(month_data, categories, report_month)
@@ -1011,16 +1012,16 @@ def show_forecasting_page():
 
         forecast_df = pd.DataFrame({
             'Mese': [d.strftime('%B %Y') for d in forecast_dates],
-            'Spesa Prevista': [f"€{v:,.2f}" for v in forecast_values]
+            'Spesa Prevista': [format_currency_ita(v) for v in forecast_values]
         })
 
         st.dataframe(forecast_df, use_container_width=True, hide_index=True)
 
         # Raccomandazioni
         if forecast_values[0] > historical.mean():
-            st.warning(f"⚠️ La previsione (€{forecast_values[0]:,.2f}) è superiore alla media storica (€{historical.mean():,.2f})")
+            st.warning(f"⚠️ La previsione ({format_currency_ita(forecast_values[0])}) è superiore alla media storica ({format_currency_ita(historical.mean())})")
         else:
-            st.success(f"✅ La previsione (€{forecast_values[0]:,.2f}) è in linea con la media storica")
+            st.success(f"✅ La previsione ({format_currency_ita(forecast_values[0])}) è in linea con la media storica")
 
     # Confronti
     st.divider()

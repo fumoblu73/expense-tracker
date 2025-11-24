@@ -6,6 +6,7 @@ Supporta diversi formati di CSV da banche italiane
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+from utils.formatters import format_currency_ita
 
 
 def parse_bank_csv(uploaded_file, date_format='auto'):
@@ -257,7 +258,7 @@ def validate_csv_preview(df, num_rows=5):
     with col1:
         st.metric("Totale Transazioni", len(df))
     with col2:
-        st.metric("Totale Importo", f"€{df['amount'].sum():,.2f}")
+        st.metric("Totale Importo", format_currency_ita(df['amount'].sum()))
     with col3:
         if len(df) > 0:
             date_range = f"{df['date'].min()} - {df['date'].max()}"

@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from utils.formatters import format_currency_ita
 
 
 def create_monthly_summary(df):
@@ -225,7 +226,8 @@ def create_top_expenses_table(df, limit=10):
     ].copy()
 
     top_expenses['date'] = top_expenses['date'].dt.strftime('%d/%m/%Y')
-    top_expenses['amount'] = top_expenses['amount'].apply(lambda x: f"€{x:,.2f}")
+    # Usa formato italiano: punto migliaia, virgola decimali
+    top_expenses['amount'] = top_expenses['amount'].apply(format_currency_ita)
 
     top_expenses.columns = ['Data', 'Descrizione', 'Categoria', 'Importo']
 
