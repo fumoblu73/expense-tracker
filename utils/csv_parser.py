@@ -38,7 +38,8 @@ def parse_bank_csv(uploaded_file, date_format='auto'):
                     uploaded_file.seek(0)
                     try:
                         # Potrebbe essere un HTML mascherato da .xls (comune per banche italiane)
-                        df = pd.read_html(uploaded_file, encoding='utf-8')[0]
+                        # IMPORTANTE: decimal=',' per formato italiano (virgola = decimale)
+                        df = pd.read_html(uploaded_file, encoding='utf-8', decimal=',', thousands='.')[0]
                     except:
                         uploaded_file.seek(0)
                         try:
