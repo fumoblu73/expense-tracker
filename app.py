@@ -642,6 +642,12 @@ def show_categories_page():
             key="add_edit_mode"
         )
 
+        # Inizializza variabili per entrambe le modalità
+        new_name = ""
+        new_budget = 0.0
+        new_color = "#FF6B6B"
+        cat_data = None
+
         if mode == "✏️ Modifica Esistente":
             # Selezione categoria da modificare
             category_to_edit = st.selectbox(
@@ -684,7 +690,7 @@ def show_categories_page():
         st.subheader("🎨 Seleziona Icona")
 
         # In modalità modifica, mostra icona corrente
-        if mode == "✏️ Modifica Esistente":
+        if mode == "✏️ Modifica Esistente" and cat_data is not None:
             current_icon = cat_data['icon']
             if current_icon.startswith('fa-'):
                 icon_html = render_icon_html(current_icon, cat_data['color'], '48px')
@@ -707,7 +713,7 @@ def show_categories_page():
             st.session_state['selected_icon'] = None
 
         # In modalità modifica, inizializza con icona corrente
-        if mode == "✏️ Modifica Esistente":
+        if mode == "✏️ Modifica Esistente" and cat_data is not None:
             if st.session_state['selected_icon'] is None:
                 st.session_state['selected_icon'] = cat_data['icon']
 
