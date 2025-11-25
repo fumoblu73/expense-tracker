@@ -817,6 +817,18 @@ def show_categories_page():
                     if not old_category_name:
                         st.error("❌ Errore: categoria da modificare non trovata")
                     else:
+                        # Debug: verifica tutti i parametri
+                        try:
+                            st.write(f"DEBUG - old_name: {old_category_name} (type: {type(old_category_name)})")
+                            st.write(f"DEBUG - new_name: {new_name} (type: {type(new_name)})")
+                            st.write(f"DEBUG - new_budget: {new_budget} (type: {type(new_budget)})")
+                            st.write(f"DEBUG - new_color: {new_color} (type: {type(new_color)})")
+                            st.write(f"DEBUG - selected_icon: {selected_icon} (type: {type(selected_icon)})")
+                            st.write(f"DEBUG - db type: {type(db)}")
+                            st.write(f"DEBUG - db has update_category: {hasattr(db, 'update_category')}")
+                        except Exception as e:
+                            st.error(f"DEBUG ERROR: {e}")
+
                         success = db.update_category(
                             old_name=old_category_name,
                             new_name=new_name,
