@@ -116,17 +116,17 @@ class ExpenseDB:
     def _add_default_categories(self, cursor, conn):
         """Aggiunge categorie predefinite al primo avvio"""
         default_categories = [
-            ('Alimentari', 500, '#FF6B6B', '🛒'),
-            ('Trasporti', 200, '#4ECDC4', '🚗'),
-            ('Utenze', 300, '#45B7D1', '💡'),
-            ('Ristoranti', 250, '#FFA07A', '🍽️'),
-            ('Shopping', 200, '#98D8C8', '🛍️'),
-            ('Salute', 150, '#F7DC6F', '⚕️'),
-            ('Svago', 150, '#BB8FCE', '🎬'),
-            ('Casa', 400, '#85C1E2', '🏠'),
-            ('Entrate', 0, '#2ECC71', '💰'),
-            ('Altro', 100, '#95A5A6', '📦'),
-            ('Non Categorizzato', 0, '#BDC3C7', '❓')
+            ('Alimentari', 500, '#FF6B6B', 'fa-cart-shopping'),
+            ('Trasporti', 200, '#4ECDC4', 'fa-car'),
+            ('Utenze', 300, '#45B7D1', 'fa-bolt'),
+            ('Ristoranti', 250, '#FFA07A', 'fa-utensils'),
+            ('Shopping', 200, '#98D8C8', 'fa-bag-shopping'),
+            ('Salute', 150, '#F7DC6F', 'fa-heart-pulse'),
+            ('Svago', 150, '#BB8FCE', 'fa-film'),
+            ('Casa', 400, '#85C1E2', 'fa-house'),
+            ('Entrate', 0, '#2ECC71', 'fa-money-bill-wave'),
+            ('Altro', 100, '#95A5A6', 'fa-box'),
+            ('Non Categorizzato', 0, '#BDC3C7', 'fa-circle-question')
         ]
 
         for name, budget, color, icon in default_categories:

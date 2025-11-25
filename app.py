@@ -114,7 +114,56 @@ def get_database():
     """Crea e restituisce istanza database"""
     return ExpenseDB()
 
+def migrate_emoji_to_fontawesome(db):
+    """
+    Migra automaticamente le emoji a Font Awesome al primo caricamento
+    """
+    # Mapping emoji → Font Awesome
+    emoji_to_fa_map = {
+        '🛒': 'fa-cart-shopping',
+        '🚗': 'fa-car',
+        '💡': 'fa-bolt',
+        '🍽️': 'fa-utensils',
+        '🛍️': 'fa-bag-shopping',
+        '⚕️': 'fa-heart-pulse',
+        '🎬': 'fa-film',
+        '🏠': 'fa-house',
+        '💰': 'fa-money-bill-wave',
+        '📦': 'fa-box',
+        '❓': 'fa-circle-question',
+        '💳': 'fa-credit-card',
+        '📱': 'fa-mobile-screen',
+        '✈️': 'fa-plane',
+        '⚡': 'fa-bolt',
+        '🍕': 'fa-pizza-slice',
+        '🎁': 'fa-gift',
+        '💊': 'fa-pills',
+        '🏃': 'fa-person-running',
+        '📚': 'fa-book',
+        '🐾': 'fa-paw',
+    }
+
+    import sqlite3
+
+    conn = sqlite3.connect(db.db_path)
+    cursor = conn.cursor()
+
+    # Aggiorna solo le emoji che sono nella mappa
+    for emoji, fa_icon in emoji_to_fa_map.items():
+        cursor.execute(
+            "UPDATE categories SET icon = ? WHERE icon = ?",
+            (fa_icon, emoji)
+        )
+
+    conn.commit()
+    conn.close()
+
 db = get_database()
+
+# Esegui migrazione icone automaticamente (solo la prima volta per sessione)
+if 'icons_migrated' not in st.session_state:
+    migrate_emoji_to_fontawesome(db)
+    st.session_state['icons_migrated'] = True
 
 
 def main():
