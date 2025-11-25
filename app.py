@@ -650,6 +650,9 @@ def show_categories_page():
                 key="edit_cat_selector"
             )
 
+            # Salva in session_state per accesso successivo
+            st.session_state['category_to_edit'] = category_to_edit
+
             # Carica dati categoria selezionata
             cat_data = categories[categories['name'] == category_to_edit].iloc[0]
 
@@ -665,6 +668,9 @@ def show_categories_page():
                 new_color = st.color_picker("Colore", value=cat_data['color'], key="edit_color")
 
         else:  # Aggiungi Nuova
+            # In modalità aggiungi, resetta la categoria da editare
+            st.session_state['category_to_edit'] = None
+
             col1, col2 = st.columns(2)
 
             with col1:
@@ -801,20 +807,25 @@ def show_categories_page():
             if new_name and selected_icon:
                 if mode == "✏️ Modifica Esistente":
                     # Modifica categoria esistente
-                    success = db.update_category(
-                        old_name=category_to_edit,
-                        new_name=new_name,
-                        new_budget=new_budget,
-                        new_color=new_color,
-                        new_icon=selected_icon
-                    )
-                    if success:
-                        st.session_state['selected_icon'] = None  # Reset selezione
-                        st.success(f"✅ Categoria '{new_name}' aggiornata con successo!")
-                        st.balloons()
-                        st.rerun()
+                    old_category_name = st.session_state.get('category_to_edit')
+                    if not old_category_name:
+                        st.error("❌ Errore: categoria da modificare non trovata")
                     else:
-                        st.error("❌ Errore: nome categoria già esistente")
+                        success = db.update_category(
+                            old_name=old_category_name,
+                            new_name=new_name,
+                            new_budget=new_budget,
+                            new_color=new_color,
+                            new_icon=selected_icon
+                        )
+                        if success:
+                            st.session_state['selected_icon'] = None  # Reset selezione
+                            st.session_state['category_to_edit'] = None  # Reset categoria
+                            st.success(f"✅ Categoria '{new_name}' aggiornata con successo!")
+                            st.balloons()
+                            st.rerun()
+                        else:
+                            st.error("❌ Errore: nome categoria già esistente")
                 else:
                     # Aggiungi nuova categoria
                     success = db.add_category(new_name, new_budget, new_color, selected_icon)
