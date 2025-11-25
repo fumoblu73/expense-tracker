@@ -263,6 +263,53 @@ class ExpenseDB:
         conn.commit()
         conn.close()
 
+    def update_category(self, old_name, new_name, new_budget, new_color, new_icon):
+        """
+        Aggiorna tutti i dati di una categoria
+
+        Args:
+            old_name: Nome corrente della categoria
+            new_name: Nuovo nome
+            new_budget: Nuovo budget
+            new_color: Nuovo colore
+            new_icon: Nuova icona
+
+        Returns:
+            True se successo, False se il nuovo nome esiste già
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            # Se il nome è cambiato, aggiorna anche le transazioni
+            if old_name != new_name:
+                # Verifica che il nuovo nome non esista già
+                cursor.execute("SELECT COUNT(*) FROM categories WHERE name = ?", (new_name,))
+                if cursor.fetchone()[0] > 0:
+                    conn.close()
+                    return False
+
+                # Aggiorna le transazioni con il nuovo nome categoria
+                cursor.execute(
+                    "UPDATE transactions SET category = ? WHERE category = ?",
+                    (new_name, old_name)
+                )
+
+            # Aggiorna la categoria
+            cursor.execute(
+                "UPDATE categories SET name = ?, budget = ?, color = ?, icon = ? WHERE name = ?",
+                (new_name, new_budget, new_color, new_icon, old_name)
+            )
+
+            conn.commit()
+            success = True
+        except sqlite3.IntegrityError:
+            success = False
+        finally:
+            conn.close()
+
+        return success
+
     def delete_category(self, category_name):
         """Elimina una categoria (le transazioni associate diventano 'Non Categorizzato')"""
         conn = sqlite3.connect(self.db_path)

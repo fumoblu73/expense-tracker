@@ -596,7 +596,7 @@ def show_categories_page():
     """Pagina gestione categorie"""
     st.title("🏷️ Gestisci Categorie")
 
-    tabs = st.tabs(["📋 Visualizza Categorie", "➕ Aggiungi Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
+    tabs = st.tabs(["📋 Visualizza Categorie", "➕ Aggiungi/Modifica Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
 
     categories = db.get_categories()
 
@@ -632,28 +632,75 @@ def show_categories_page():
                     st.divider()
 
     with tabs[1]:
-        st.subheader("Aggiungi Nuova Categoria")
+        st.subheader("Aggiungi Nuova o Modifica Categoria Esistente")
 
-        col1, col2 = st.columns(2)
+        # Selettore modalità: Aggiungi o Modifica
+        mode = st.radio(
+            "Modalità",
+            ["➕ Aggiungi Nuova", "✏️ Modifica Esistente"],
+            horizontal=True,
+            key="add_edit_mode"
+        )
 
-        with col1:
-            new_name = st.text_input("Nome Categoria", placeholder="es. Bollette")
-            new_budget = st.number_input("Budget Mensile (€)", min_value=0.0, value=100.0, step=10.0)
+        if mode == "✏️ Modifica Esistente":
+            # Selezione categoria da modificare
+            category_to_edit = st.selectbox(
+                "Seleziona Categoria da Modificare",
+                options=categories['name'].tolist(),
+                key="edit_cat_selector"
+            )
 
-        with col2:
-            new_color = st.color_picker("Colore", "#FF6B6B")
+            # Carica dati categoria selezionata
+            cat_data = categories[categories['name'] == category_to_edit].iloc[0]
+
+            st.info(f"Stai modificando: **{cat_data['name']}**")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                new_name = st.text_input("Nuovo Nome Categoria", value=cat_data['name'], placeholder="es. Bollette", key="edit_name")
+                new_budget = st.number_input("Budget Mensile (€)", min_value=0.0, value=float(cat_data['budget']), step=10.0, key="edit_budget")
+
+            with col2:
+                new_color = st.color_picker("Colore", value=cat_data['color'], key="edit_color")
+
+        else:  # Aggiungi Nuova
+            col1, col2 = st.columns(2)
+
+            with col1:
+                new_name = st.text_input("Nome Categoria", placeholder="es. Bollette", key="add_name")
+                new_budget = st.number_input("Budget Mensile (€)", min_value=0.0, value=100.0, step=10.0, key="add_budget")
+
+            with col2:
+                new_color = st.color_picker("Colore", "#FF6B6B", key="add_color")
 
         # Selector icone Font Awesome con preview
         st.subheader("🎨 Seleziona Icona")
+
+        # In modalità modifica, mostra icona corrente
+        if mode == "✏️ Modifica Esistente":
+            current_icon = cat_data['icon']
+            if current_icon.startswith('fa-'):
+                icon_html = render_icon_html(current_icon, cat_data['color'], '48px')
+                st.markdown(f"**Icona Corrente:** {icon_html}", unsafe_allow_html=True)
+            else:
+                st.markdown(f"**Icona Corrente:** {current_icon}")
+            st.caption(f"Codice: `{current_icon}`")
+            st.divider()
 
         # Modalità selezione
         selection_mode = st.radio(
             "Modalità",
             ["📁 Per Categoria", "🔍 Ricerca", "😊 Emoji Classiche"],
-            horizontal=True
+            horizontal=True,
+            key="icon_selection_mode"
         )
 
-        selected_icon = None
+        # In modalità modifica, inizializza con icona corrente
+        if mode == "✏️ Modifica Esistente":
+            selected_icon = cat_data['icon']
+        else:
+            selected_icon = None
 
         if selection_mode == "😊 Emoji Classiche":
             # Emoji classiche
@@ -723,14 +770,40 @@ def show_categories_page():
                 st.markdown(f"<div style='text-align: center; font-size: 48px; padding: 20px;'>{selected_icon}</div>", unsafe_allow_html=True)
                 st.info(f"✅ Emoji selezionata: **{selected_icon}**")
 
-        if st.button("➕ Aggiungi Categoria", use_container_width=True, type="primary"):
+        # Bottone di salvataggio (Aggiungi o Modifica)
+        if mode == "✏️ Modifica Esistente":
+            button_label = "💾 Salva Modifiche"
+            button_type = "primary"
+        else:
+            button_label = "➕ Aggiungi Categoria"
+            button_type = "primary"
+
+        if st.button(button_label, use_container_width=True, type=button_type):
             if new_name and selected_icon:
-                success = db.add_category(new_name, new_budget, new_color, selected_icon)
-                if success:
-                    st.success(f"✅ Categoria '{new_name}' aggiunta!")
-                    st.rerun()
+                if mode == "✏️ Modifica Esistente":
+                    # Modifica categoria esistente
+                    success = db.update_category(
+                        old_name=category_to_edit,
+                        new_name=new_name,
+                        new_budget=new_budget,
+                        new_color=new_color,
+                        new_icon=selected_icon
+                    )
+                    if success:
+                        st.success(f"✅ Categoria '{new_name}' aggiornata con successo!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("❌ Errore: nome categoria già esistente")
                 else:
-                    st.error("❌ Categoria già esistente")
+                    # Aggiungi nuova categoria
+                    success = db.add_category(new_name, new_budget, new_color, selected_icon)
+                    if success:
+                        st.success(f"✅ Categoria '{new_name}' aggiunta!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("❌ Categoria già esistente")
             elif not new_name:
                 st.warning("⚠️ Inserisci un nome per la categoria")
             else:
@@ -1020,6 +1093,10 @@ def show_reports_page():
         return
 
     transactions['date'] = pd.to_datetime(transactions['date'])
+
+    # Calcola mesi disponibili per selector email report
+    available_months = transactions['date'].dt.to_period('M').unique()
+    available_months = [pd.Timestamp(m.to_timestamp()) for m in available_months]
 
     tabs = st.tabs(["📅 Report Mensile", "📈 Analisi Trend", "📧 Invia Report"])
 
