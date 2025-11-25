@@ -817,18 +817,6 @@ def show_categories_page():
                     if not old_category_name:
                         st.error("❌ Errore: categoria da modificare non trovata")
                     else:
-                        # Debug: verifica tutti i parametri
-                        try:
-                            st.write(f"DEBUG - old_name: {old_category_name} (type: {type(old_category_name)})")
-                            st.write(f"DEBUG - new_name: {new_name} (type: {type(new_name)})")
-                            st.write(f"DEBUG - new_budget: {new_budget} (type: {type(new_budget)})")
-                            st.write(f"DEBUG - new_color: {new_color} (type: {type(new_color)})")
-                            st.write(f"DEBUG - selected_icon: {selected_icon} (type: {type(selected_icon)})")
-                            st.write(f"DEBUG - db type: {type(db)}")
-                            st.write(f"DEBUG - db has update_category: {hasattr(db, 'update_category')}")
-                        except Exception as e:
-                            st.error(f"DEBUG ERROR: {e}")
-
                         success = db.update_category(
                             old_name=old_category_name,
                             new_name=new_name,
@@ -894,18 +882,124 @@ def show_categories_page():
         transactions = db.get_all_transactions()
 
         if len(transactions) > 0:
-            # Filtra solo non categorizzate
-            uncategorized = transactions[transactions['category'] == 'Non Categorizzato']
+            # Converti colonna date in datetime
+            transactions['date'] = pd.to_datetime(transactions['date'])
 
-            st.write(f"Trovate **{len(uncategorized)}** transazioni non categorizzate")
+            # Filtri principali
+            col1, col2, col3 = st.columns([2, 2, 1])
 
-            if len(uncategorized) > 0:
+            with col1:
+                filter_mode = st.radio(
+                    "Mostra",
+                    ["Solo Non Categorizzate", "Tutte le Transazioni", "Per Categoria"],
+                    horizontal=True,
+                    key="recat_filter_mode"
+                )
+
+            with col2:
+                if filter_mode == "Per Categoria":
+                    selected_category = st.selectbox(
+                        "Filtra per Categoria",
+                        options=["Tutte"] + categories['name'].tolist(),
+                        key="recat_category_filter"
+                    )
+                else:
+                    selected_category = None
+
+            with col3:
+                st.write("")  # Spacer
+
+            # Filtri aggiuntivi
+            with st.expander("🔍 Filtri Avanzati", expanded=False):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    # Filtro per mese
+                    available_months = transactions['date'].dt.to_period('M').unique().sort_values(ascending=False)
+                    month_options = ["Tutti i mesi"] + [m.strftime('%B %Y') for m in available_months.to_timestamp()]
+                    selected_month = st.selectbox(
+                        "Filtra per Mese",
+                        options=month_options,
+                        key="recat_month_filter"
+                    )
+
+                with col2:
+                    # Filtro per ricerca testo
+                    search_text = st.text_input(
+                        "🔍 Cerca nella descrizione",
+                        placeholder="es. supermercato, amazon...",
+                        key="recat_search"
+                    )
+
+            # Applica filtro base (categoria)
+            if filter_mode == "Solo Non Categorizzate":
+                filtered_transactions = transactions[transactions['category'] == 'Non Categorizzato'].copy()
+            elif filter_mode == "Per Categoria":
+                if selected_category and selected_category != "Tutte":
+                    filtered_transactions = transactions[transactions['category'] == selected_category].copy()
+                else:
+                    filtered_transactions = transactions.copy()
+            else:  # Tutte le Transazioni
+                filtered_transactions = transactions.copy()
+
+            # Applica filtro mese
+            if selected_month != "Tutti i mesi":
+                # Trova il periodo corrispondente
+                selected_period_str = selected_month
+                for period in available_months:
+                    if period.strftime('%B %Y') == selected_period_str:
+                        filtered_transactions = filtered_transactions[
+                            filtered_transactions['date'].dt.to_period('M') == period
+                        ]
+                        break
+
+            # Applica filtro ricerca testo
+            if search_text:
+                filtered_transactions = filtered_transactions[
+                    filtered_transactions['description'].str.contains(search_text, case=False, na=False)
+                ]
+
+            # Ordinamento
+            sort_col1, sort_col2 = st.columns([3, 1])
+            with sort_col1:
+                st.write("")  # Spacer
+            with sort_col2:
+                sort_order = st.selectbox(
+                    "Ordina per",
+                    ["Data (recenti prima)", "Data (vecchie prima)", "Importo (decrescente)", "Importo (crescente)"],
+                    key="recat_sort",
+                    label_visibility="collapsed"
+                )
+
+            # Applica ordinamento
+            if sort_order == "Data (recenti prima)":
+                filtered_transactions = filtered_transactions.sort_values('date', ascending=False)
+            elif sort_order == "Data (vecchie prima)":
+                filtered_transactions = filtered_transactions.sort_values('date', ascending=True)
+            elif sort_order == "Importo (decrescente)":
+                filtered_transactions = filtered_transactions.sort_values('amount', ascending=False)
+            else:  # Importo (crescente)
+                filtered_transactions = filtered_transactions.sort_values('amount', ascending=True)
+
+            # Mostra contatore
+            if filter_mode == "Solo Non Categorizzate":
+                st.write(f"Trovate **{len(filtered_transactions)}** transazioni non categorizzate")
+            elif filter_mode == "Per Categoria" and selected_category and selected_category != "Tutte":
+                st.write(f"Trovate **{len(filtered_transactions)}** transazioni in categoria **{selected_category}**")
+            else:
+                st.write(f"Totale **{len(filtered_transactions)}** transazioni")
+
+            if len(filtered_transactions) > 0:
                 st.info("💡 **Sistema di Apprendimento Attivo**: Quando categorizzi una transazione, l'app ricorderà automaticamente:\n"
                        "- **Spese**: merchant/negozio per categorizzazione futura\n"
                        "- **Entrate**: pattern descrizione per riconoscere entrate simili")
 
-                # Mostra le prime 20
-                for idx, row in uncategorized.head(20).iterrows():
+                # Mostra le prime 50 transazioni filtrate
+                display_count = min(len(filtered_transactions), 50)
+                if len(filtered_transactions) > 50:
+                    st.caption(f"Mostrate prime {display_count} di {len(filtered_transactions)} transazioni")
+
+                for idx, row in filtered_transactions.head(50).iterrows():
                     with st.container():
                         col1, col2, col3 = st.columns([3, 2, 1])
 
