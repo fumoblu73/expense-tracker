@@ -915,8 +915,17 @@ def show_categories_page():
 
                 with col1:
                     # Filtro per mese
-                    available_months = transactions['date'].dt.to_period('M').unique().sort_values(ascending=False)
-                    month_options = ["Tutti i mesi"] + [m.strftime('%B %Y') for m in available_months.to_timestamp()]
+                    import locale
+                    try:
+                        locale.setlocale(locale.LC_TIME, 'it_IT.UTF-8')
+                    except:
+                        try:
+                            locale.setlocale(locale.LC_TIME, 'Italian_Italy.1252')
+                        except:
+                            pass
+
+                    available_months = sorted(transactions['date'].dt.to_period('M').unique(), reverse=True)
+                    month_options = ["Tutti i mesi"] + [pd.Timestamp(m.to_timestamp()).strftime('%B %Y') for m in available_months]
                     selected_month = st.selectbox(
                         "Filtra per Mese",
                         options=month_options,
@@ -947,7 +956,7 @@ def show_categories_page():
                 # Trova il periodo corrispondente
                 selected_period_str = selected_month
                 for period in available_months:
-                    if period.strftime('%B %Y') == selected_period_str:
+                    if pd.Timestamp(period.to_timestamp()).strftime('%B %Y') == selected_period_str:
                         filtered_transactions = filtered_transactions[
                             filtered_transactions['date'].dt.to_period('M') == period
                         ]
