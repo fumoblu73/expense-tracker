@@ -532,37 +532,11 @@ def show_upload_page():
                                         st.rerun()
 
                             # Suggerisci di categorizzare se ci sono nuove transazioni
-                            if saved_count > 0 and not auto_categorize:
+                            if saved_count > 0 and not use_smart_cat:
                                 st.info("💡 Vai su **🏷️ Gestisci Categorie** per categorizzare le transazioni")
 
                         except Exception as e:
                             st.error(f"❌ Errore nel salvataggio: {str(e)}")
-
-
-def auto_categorize_transactions(df, categories_df):
-    """Categorizzazione automatica semplice basata su parole chiave"""
-
-    # Dizionario parole chiave -> categoria
-    keywords = {
-        'Alimentari': ['supermercato', 'conad', 'coop', 'esselunga', 'carrefour', 'lidl', 'eurospin', 'pam'],
-        'Trasporti': ['benzina', 'eni', 'q8', 'ip', 'esso', 'trenitalia', 'italo', 'atm', 'bus', 'metro'],
-        'Ristoranti': ['ristorante', 'pizzeria', 'bar', 'caffè', 'trattoria', 'osteria', 'mcdonald', 'burger'],
-        'Utenze': ['enel', 'eni', 'gas', 'acqua', 'luce', 'telecom', 'tim', 'vodafone', 'wind'],
-        'Shopping': ['amazon', 'zara', 'h&m', 'nike', 'decathlon', 'ikea', 'mediaworld'],
-        'Salute': ['farmacia', 'dottore', 'medico', 'ospedale', 'clinica'],
-        'Casa': ['affitto', 'condominio', 'idraulico', 'elettricista'],
-        'Svago': ['cinema', 'teatro', 'palestra', 'sport', 'netflix', 'spotify']
-    }
-
-    def categorize_row(description):
-        desc_lower = str(description).lower()
-        for category, words in keywords.items():
-            if any(word in desc_lower for word in words):
-                return category
-        return 'Non Categorizzato'
-
-    df['category'] = df['description'].apply(categorize_row)
-    return df
 
 
 def show_categories_page():
