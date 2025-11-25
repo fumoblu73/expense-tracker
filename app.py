@@ -50,6 +50,7 @@ from utils.forecasting import (
     display_period_comparison
 )
 from utils.email_sender import send_monthly_report, configure_email_settings
+from utils.icon_selector import ICON_LIBRARY, get_fontawesome_cdn, render_icon_html, search_icons
 
 # Configurazione pagina
 st.set_page_config(
@@ -58,6 +59,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Carica Font Awesome CDN
+st.markdown(get_fontawesome_cdn(), unsafe_allow_html=True)
 
 # CSS personalizzato per mobile
 st.markdown("""
@@ -557,7 +561,12 @@ def show_categories_page():
                     col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
 
                     with col1:
-                        st.markdown(f"<h1>{cat['icon']}</h1>", unsafe_allow_html=True)
+                        # Supporta sia emoji che Font Awesome
+                        if cat['icon'].startswith('fa-'):
+                            icon_html = render_icon_html(cat['icon'], cat['color'], '48px')
+                            st.markdown(icon_html, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<h1>{cat['icon']}</h1>", unsafe_allow_html=True)
 
                     with col2:
                         st.markdown(f"**{cat['name']}**")
@@ -583,19 +592,100 @@ def show_categories_page():
             new_budget = st.number_input("Budget Mensile (€)", min_value=0.0, value=100.0, step=10.0)
 
         with col2:
-            new_icon = st.selectbox("Icona", ["📦", "🛒", "🚗", "💡", "🍽️", "🛍️", "⚕️", "🎬", "🏠", "💰", "📱", "✈️"])
             new_color = st.color_picker("Colore", "#FF6B6B")
 
+        # Selector icone Font Awesome con preview
+        st.subheader("🎨 Seleziona Icona")
+
+        # Modalità selezione
+        selection_mode = st.radio(
+            "Modalità",
+            ["📁 Per Categoria", "🔍 Ricerca", "😊 Emoji Classiche"],
+            horizontal=True
+        )
+
+        selected_icon = None
+
+        if selection_mode == "😊 Emoji Classiche":
+            # Emoji classiche
+            emoji_options = ["📦", "🛒", "🚗", "💡", "🍽️", "🛍️", "⚕️", "🎬", "🏠", "💰", "📱", "✈️", "⚡", "🍕", "🎁", "💊", "🏃", "📚", "🐾"]
+            selected_icon = st.selectbox("Emoji", emoji_options)
+
+        elif selection_mode == "🔍 Ricerca":
+            # Ricerca icone
+            search_query = st.text_input("🔍 Cerca icona", placeholder="es. casa, auto, cibo...")
+
+            if search_query:
+                results = search_icons(search_query)
+
+                if results:
+                    st.write(f"Trovate **{len(results)}** icone")
+
+                    # Mostra risultati con preview
+                    cols = st.columns(6)
+                    for idx, icon_data in enumerate(results[:30]):  # Limita a 30 risultati
+                        with cols[idx % 6]:
+                            icon_html = render_icon_html(icon_data['class'], new_color, '32px')
+                            if st.button(f"{icon_data['name']}", key=f"search_{idx}", use_container_width=True):
+                                selected_icon = icon_data['class']
+                            st.markdown(icon_html, unsafe_allow_html=True)
+                            st.caption(icon_data['name'])
+                else:
+                    st.info("Nessuna icona trovata. Prova con termini diversi.")
+            else:
+                st.info("Inserisci un termine di ricerca per trovare icone")
+
+        else:  # Per Categoria
+            # Selezione per categoria
+            category_name = st.selectbox(
+                "Categoria icone",
+                list(ICON_LIBRARY.keys())
+            )
+
+            icons_in_category = ICON_LIBRARY[category_name]
+
+            st.write(f"**{len(icons_in_category)}** icone disponibili")
+
+            # Mostra griglia icone con preview
+            cols = st.columns(6)
+            for idx, (icon_class, icon_name) in enumerate(icons_in_category):
+                with cols[idx % 6]:
+                    # Renderizza icona con colore personalizzato
+                    icon_html = render_icon_html(icon_class, new_color, '32px')
+
+                    # Bottone per selezione
+                    if st.button(icon_name, key=f"icon_{idx}", use_container_width=True):
+                        selected_icon = icon_class
+
+                    # Mostra preview icona
+                    st.markdown(icon_html, unsafe_allow_html=True)
+
+        # Mostra icona selezionata
+        if selected_icon:
+            st.divider()
+            st.subheader("Anteprima")
+            if selected_icon.startswith('fa-'):
+                # Font Awesome icon
+                preview_html = render_icon_html(selected_icon, new_color, '48px')
+                st.markdown(f"<div style='text-align: center; padding: 20px;'>{preview_html}</div>", unsafe_allow_html=True)
+                st.info(f"✅ Icona selezionata: **{selected_icon}**")
+            else:
+                # Emoji
+                st.markdown(f"<div style='text-align: center; font-size: 48px; padding: 20px;'>{selected_icon}</div>", unsafe_allow_html=True)
+                st.info(f"✅ Emoji selezionata: **{selected_icon}**")
+
         if st.button("➕ Aggiungi Categoria", use_container_width=True, type="primary"):
-            if new_name:
-                success = db.add_category(new_name, new_budget, new_color, new_icon)
+            if new_name and selected_icon:
+                success = db.add_category(new_name, new_budget, new_color, selected_icon)
                 if success:
                     st.success(f"✅ Categoria '{new_name}' aggiunta!")
                     st.rerun()
                 else:
                     st.error("❌ Categoria già esistente")
+            elif not new_name:
+                st.warning("⚠️ Inserisci un nome per la categoria")
             else:
-                st.warning("Inserisci un nome per la categoria")
+                st.warning("⚠️ Seleziona un'icona")
 
     with tabs[2]:
         st.subheader("Modifica Budget Categorie")
@@ -604,7 +694,12 @@ def show_categories_page():
             col1, col2, col3 = st.columns([2, 2, 1])
 
             with col1:
-                st.write(f"{cat['icon']} **{cat['name']}**")
+                # Supporta sia emoji che Font Awesome
+                if cat['icon'].startswith('fa-'):
+                    icon_html = render_icon_html(cat['icon'], cat['color'], '24px')
+                    st.markdown(f"{icon_html} **{cat['name']}**", unsafe_allow_html=True)
+                else:
+                    st.write(f"{cat['icon']} **{cat['name']}**")
 
             with col2:
                 new_budget = st.number_input(
