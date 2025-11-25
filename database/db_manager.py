@@ -1,6 +1,8 @@
 """
 Database Manager per l'app di gestione spese familiari
 Gestisce tutte le operazioni CRUD con SQLite
+
+Version: 2.0 - Aggiunto supporto per update_category completo
 """
 
 import sqlite3
