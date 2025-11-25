@@ -696,16 +696,22 @@ def show_categories_page():
             key="icon_selection_mode"
         )
 
+        # Inizializza session_state per icona selezionata
+        if 'selected_icon' not in st.session_state:
+            st.session_state['selected_icon'] = None
+
         # In modalità modifica, inizializza con icona corrente
         if mode == "✏️ Modifica Esistente":
-            selected_icon = cat_data['icon']
-        else:
-            selected_icon = None
+            if st.session_state['selected_icon'] is None:
+                st.session_state['selected_icon'] = cat_data['icon']
 
         if selection_mode == "😊 Emoji Classiche":
             # Emoji classiche
             emoji_options = ["📦", "🛒", "🚗", "💡", "🍽️", "🛍️", "⚕️", "🎬", "🏠", "💰", "📱", "✈️", "⚡", "🍕", "🎁", "💊", "🏃", "📚", "🐾"]
-            selected_icon = st.selectbox("Emoji", emoji_options)
+            selected_emoji = st.selectbox("Emoji", emoji_options, key="emoji_selector")
+            if st.button("✅ Conferma Emoji", use_container_width=True):
+                st.session_state['selected_icon'] = selected_emoji
+                st.rerun()
 
         elif selection_mode == "🔍 Ricerca":
             # Ricerca icone
@@ -723,7 +729,8 @@ def show_categories_page():
                         with cols[idx % 6]:
                             icon_html = render_icon_html(icon_data['class'], new_color, '32px')
                             if st.button(f"{icon_data['name']}", key=f"search_{idx}", use_container_width=True):
-                                selected_icon = icon_data['class']
+                                st.session_state['selected_icon'] = icon_data['class']
+                                st.rerun()
                             st.markdown(icon_html, unsafe_allow_html=True)
                             st.caption(icon_data['name'])
                 else:
@@ -735,7 +742,8 @@ def show_categories_page():
             # Selezione per categoria
             category_name = st.selectbox(
                 "Categoria icone",
-                list(ICON_LIBRARY.keys())
+                list(ICON_LIBRARY.keys()),
+                key="icon_category_selector"
             )
 
             icons_in_category = ICON_LIBRARY[category_name]
@@ -751,15 +759,26 @@ def show_categories_page():
 
                     # Bottone per selezione
                     if st.button(icon_name, key=f"icon_{idx}", use_container_width=True):
-                        selected_icon = icon_class
+                        st.session_state['selected_icon'] = icon_class
+                        st.rerun()
 
                     # Mostra preview icona
                     st.markdown(icon_html, unsafe_allow_html=True)
 
+        # Usa icona da session_state
+        selected_icon = st.session_state.get('selected_icon', None)
+
         # Mostra icona selezionata
         if selected_icon:
             st.divider()
-            st.subheader("Anteprima")
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.subheader("Anteprima")
+            with col2:
+                if st.button("🔄 Cambia", key="reset_icon"):
+                    st.session_state['selected_icon'] = None
+                    st.rerun()
+
             if selected_icon.startswith('fa-'):
                 # Font Awesome icon
                 preview_html = render_icon_html(selected_icon, new_color, '48px')
@@ -790,6 +809,7 @@ def show_categories_page():
                         new_icon=selected_icon
                     )
                     if success:
+                        st.session_state['selected_icon'] = None  # Reset selezione
                         st.success(f"✅ Categoria '{new_name}' aggiornata con successo!")
                         st.balloons()
                         st.rerun()
@@ -799,6 +819,7 @@ def show_categories_page():
                     # Aggiungi nuova categoria
                     success = db.add_category(new_name, new_budget, new_color, selected_icon)
                     if success:
+                        st.session_state['selected_icon'] = None  # Reset selezione
                         st.success(f"✅ Categoria '{new_name}' aggiunta!")
                         st.balloons()
                         st.rerun()
