@@ -143,15 +143,13 @@ def migrate_emoji_to_fontawesome(db):
         '🐾': 'fa-paw',
     }
 
-    import sqlite3
-
-    conn = sqlite3.connect(db.db_path)
+    conn = db._get_conn()
     cursor = conn.cursor()
 
     # Aggiorna solo le emoji che sono nella mappa
     for emoji, fa_icon in emoji_to_fa_map.items():
         cursor.execute(
-            "UPDATE categories SET icon = ? WHERE icon = ?",
+            "UPDATE categories SET icon = %s WHERE icon = %s",
             (fa_icon, emoji)
         )
 
@@ -1567,7 +1565,7 @@ def show_settings_page():
                 # Backup completo ZIP
                 if st.button("📦 Scarica Backup Completo (ZIP)", use_container_width=True, type="primary"):
                     with st.spinner("Creazione backup in corso..."):
-                        zip_buffer = create_full_backup(db.db_path)
+                        zip_buffer = create_full_backup(db)
 
                         st.download_button(
                             "⬇️ Download Backup ZIP",
@@ -1647,7 +1645,7 @@ def show_settings_page():
                     with st.spinner("Ripristino in corso..."):
                         # Reset uploaded file position
                         uploaded_backup.seek(0)
-                        stats = restore_backup(uploaded_backup, db.db_path, mode=restore_mode)
+                        stats = restore_backup(uploaded_backup, db, mode=restore_mode)
 
                         if stats:
                             st.success("✅ Ripristino completato con successo!")
@@ -1687,8 +1685,7 @@ def show_settings_page():
             if st.button("🗑️ Elimina Tutti i Dati", type="secondary"):
                 if confirm == "ELIMINA":
                     # Elimina tutte le transazioni
-                    import sqlite3
-                    conn = sqlite3.connect(db.db_path)
+                    conn = db._get_conn()
                     cursor = conn.cursor()
                     cursor.execute("DELETE FROM transactions")
                     conn.commit()

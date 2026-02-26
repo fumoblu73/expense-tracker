@@ -1,33 +1,40 @@
 """
 Database Manager per l'app di gestione spese familiari
-Gestisce tutte le operazioni CRUD con SQLite
+Gestisce tutte le operazioni CRUD con PostgreSQL (Supabase)
 
-Version: 2.0 - Aggiunto supporto per update_category completo
+Version: 3.0 - Migrazione da SQLite a PostgreSQL per deploy cloud
 """
 
-import sqlite3
+import psycopg2
+import psycopg2.errors
 import pandas as pd
-from pathlib import Path
+from sqlalchemy import create_engine
+import streamlit as st
 from datetime import datetime
 
 
 class ExpenseDB:
-    """Gestisce il database SQLite delle spese"""
+    """Gestisce il database PostgreSQL delle spese"""
 
-    def __init__(self, db_path="data/expenses.db"):
-        self.db_path = db_path
-        Path("data").mkdir(exist_ok=True)
+    def __init__(self):
+        self.database_url = st.secrets["database"]["url"]
+        # SQLAlchemy engine per pandas to_sql()
+        self.engine = create_engine(self.database_url)
         self.init_database()
+
+    def _get_conn(self):
+        """Restituisce una nuova connessione psycopg2"""
+        return psycopg2.connect(self.database_url)
 
     def init_database(self):
         """Inizializza il database con le tabelle necessarie"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
 
         # Tabella transazioni
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 date DATE NOT NULL,
                 description TEXT,
                 amount REAL NOT NULL,
@@ -40,7 +47,7 @@ class ExpenseDB:
         # Tabella categorie
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
                 budget REAL DEFAULT 0,
                 color TEXT,
@@ -51,11 +58,11 @@ class ExpenseDB:
         # Tabella alert budget
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS budget_alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 category TEXT NOT NULL,
                 month TEXT NOT NULL,
                 threshold_percentage INTEGER DEFAULT 90,
-                alert_sent BOOLEAN DEFAULT 0,
+                alert_sent BOOLEAN DEFAULT FALSE,
                 FOREIGN KEY (category) REFERENCES categories(name)
             )
         ''')
@@ -71,7 +78,7 @@ class ExpenseDB:
         # Tabella apprendimento merchant -> categoria
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS merchant_categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 merchant TEXT UNIQUE NOT NULL,
                 category TEXT NOT NULL,
                 last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -82,14 +89,14 @@ class ExpenseDB:
         # Tabella spese ricorrenti
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS recurring_expenses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 category TEXT NOT NULL,
                 amount REAL NOT NULL,
                 frequency TEXT NOT NULL CHECK(frequency IN ('mensile', 'settimanale', 'annuale')),
                 day_of_period INTEGER,
                 start_date DATE NOT NULL,
-                active BOOLEAN DEFAULT 1,
+                active BOOLEAN DEFAULT TRUE,
                 last_generated DATE,
                 notes TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -100,7 +107,7 @@ class ExpenseDB:
         # Tabella apprendimento pattern entrate -> categoria
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS learned_income_patterns (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 description_pattern TEXT UNIQUE NOT NULL,
                 category TEXT NOT NULL,
                 learned_count INTEGER DEFAULT 1,
@@ -134,17 +141,17 @@ class ExpenseDB:
         for name, budget, color, icon in default_categories:
             try:
                 cursor.execute(
-                    'INSERT OR IGNORE INTO categories (name, budget, color, icon) VALUES (?, ?, ?, ?)',
+                    'INSERT INTO categories (name, budget, color, icon) VALUES (%s, %s, %s, %s) ON CONFLICT (name) DO NOTHING',
                     (name, budget, color, icon)
                 )
-            except:
+            except Exception:
                 pass
 
         conn.commit()
 
     def insert_transactions(self, df):
         """Inserisce transazioni dal DataFrame evitando duplicati"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
 
         # Assicurati che le colonne necessarie esistano
         required_columns = ['date', 'description', 'amount', 'category']
@@ -170,33 +177,34 @@ class ExpenseDB:
 
         if len(existing) > 0:
             # Crea chiave univoca per confronto
-            existing['key'] = existing['date'] + '|' + existing['description'] + '|' + existing['amount'].astype(str)
-            df_to_insert['key'] = df_to_insert['date'] + '|' + df_to_insert['description'] + '|' + df_to_insert['amount'].astype(str)
+            existing['key'] = existing['date'].astype(str) + '|' + existing['description'] + '|' + existing['amount'].astype(str)
+            df_to_insert['key'] = df_to_insert['date'].astype(str) + '|' + df_to_insert['description'] + '|' + df_to_insert['amount'].astype(str)
 
             # Filtra solo le transazioni nuove (non duplicate)
             df_to_insert = df_to_insert[~df_to_insert['key'].isin(existing['key'])].copy()
             df_to_insert = df_to_insert.drop(columns=['key'])
 
+        conn.close()
+
         # Inserisci solo se ci sono transazioni non duplicate
         if len(df_to_insert) > 0:
-            df_to_insert.to_sql('transactions', conn, if_exists='append', index=False)
+            df_to_insert.to_sql('transactions', self.engine, if_exists='append', index=False)
 
-        conn.close()
         return len(df_to_insert)  # Ritorna numero di transazioni inserite
 
     def get_all_transactions(self):
         """Recupera tutte le transazioni"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         df = pd.read_sql_query("SELECT * FROM transactions ORDER BY date DESC", conn)
         conn.close()
         return df
 
     def get_transactions_by_date_range(self, start_date, end_date):
         """Recupera transazioni in un intervallo di date"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         query = """
             SELECT * FROM transactions
-            WHERE date BETWEEN ? AND ?
+            WHERE date BETWEEN %s AND %s
             ORDER BY date DESC
         """
         df = pd.read_sql_query(query, conn, params=(start_date, end_date))
@@ -205,18 +213,18 @@ class ExpenseDB:
 
     def get_transactions_by_category(self, category):
         """Recupera transazioni per categoria"""
-        conn = sqlite3.connect(self.db_path)
-        query = "SELECT * FROM transactions WHERE category = ? ORDER BY date DESC"
+        conn = self._get_conn()
+        query = "SELECT * FROM transactions WHERE category = %s ORDER BY date DESC"
         df = pd.read_sql_query(query, conn, params=(category,))
         conn.close()
         return df
 
     def update_transaction_category(self, transaction_id, new_category):
         """Aggiorna la categoria di una transazione"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE transactions SET category = ? WHERE id = ?",
+            "UPDATE transactions SET category = %s WHERE id = %s",
             (new_category, transaction_id)
         )
         conn.commit()
@@ -224,31 +232,31 @@ class ExpenseDB:
 
     def delete_transaction(self, transaction_id):
         """Elimina una transazione"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
+        cursor.execute("DELETE FROM transactions WHERE id = %s", (transaction_id,))
         conn.commit()
         conn.close()
 
     def get_categories(self):
         """Recupera tutte le categorie"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         df = pd.read_sql_query("SELECT * FROM categories ORDER BY name", conn)
         conn.close()
         return df
 
     def add_category(self, name, budget=0, color='#95A5A6', icon='📦'):
         """Aggiunge una nuova categoria"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
         try:
             cursor.execute(
-                'INSERT INTO categories (name, budget, color, icon) VALUES (?, ?, ?, ?)',
+                'INSERT INTO categories (name, budget, color, icon) VALUES (%s, %s, %s, %s)',
                 (name, budget, color, icon)
             )
             conn.commit()
             success = True
-        except sqlite3.IntegrityError:
+        except psycopg2.errors.UniqueViolation:
             success = False
         finally:
             conn.close()
@@ -256,10 +264,10 @@ class ExpenseDB:
 
     def update_category_budget(self, category_name, new_budget):
         """Aggiorna il budget di una categoria"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE categories SET budget = ? WHERE name = ?",
+            "UPDATE categories SET budget = %s WHERE name = %s",
             (new_budget, category_name)
         )
         conn.commit()
@@ -279,33 +287,33 @@ class ExpenseDB:
         Returns:
             True se successo, False se il nuovo nome esiste già
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
 
         try:
             # Se il nome è cambiato, aggiorna anche le transazioni
             if old_name != new_name:
                 # Verifica che il nuovo nome non esista già
-                cursor.execute("SELECT COUNT(*) FROM categories WHERE name = ?", (new_name,))
+                cursor.execute("SELECT COUNT(*) FROM categories WHERE name = %s", (new_name,))
                 if cursor.fetchone()[0] > 0:
                     conn.close()
                     return False
 
                 # Aggiorna le transazioni con il nuovo nome categoria
                 cursor.execute(
-                    "UPDATE transactions SET category = ? WHERE category = ?",
+                    "UPDATE transactions SET category = %s WHERE category = %s",
                     (new_name, old_name)
                 )
 
             # Aggiorna la categoria
             cursor.execute(
-                "UPDATE categories SET name = ?, budget = ?, color = ?, icon = ? WHERE name = ?",
+                "UPDATE categories SET name = %s, budget = %s, color = %s, icon = %s WHERE name = %s",
                 (new_name, new_budget, new_color, new_icon, old_name)
             )
 
             conn.commit()
             success = True
-        except sqlite3.IntegrityError:
+        except psycopg2.errors.UniqueViolation:
             success = False
         finally:
             conn.close()
@@ -314,41 +322,41 @@ class ExpenseDB:
 
     def delete_category(self, category_name):
         """Elimina una categoria (le transazioni associate diventano 'Non Categorizzato')"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
 
         # Aggiorna le transazioni con questa categoria
         cursor.execute(
-            "UPDATE transactions SET category = 'Non Categorizzato' WHERE category = ?",
+            "UPDATE transactions SET category = 'Non Categorizzato' WHERE category = %s",
             (category_name,)
         )
 
         # Elimina la categoria
-        cursor.execute("DELETE FROM categories WHERE name = ?", (category_name,))
+        cursor.execute("DELETE FROM categories WHERE name = %s", (category_name,))
 
         conn.commit()
         conn.close()
 
     def get_monthly_summary(self, year, month):
         """Ottieni riepilogo mensile"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         query = """
             SELECT
                 category,
                 SUM(amount) as total,
                 COUNT(*) as count
             FROM transactions
-            WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?
+            WHERE EXTRACT(YEAR FROM date::date) = %s AND EXTRACT(MONTH FROM date::date) = %s
             GROUP BY category
             ORDER BY total DESC
         """
-        df = pd.read_sql_query(query, conn, params=(str(year), f"{month:02d}"))
+        df = pd.read_sql_query(query, conn, params=(year, month))
         conn.close()
         return df
 
     def get_category_totals(self):
         """Ottieni totali per categoria (tutti i tempi)"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         query = """
             SELECT
                 category,
@@ -364,23 +372,23 @@ class ExpenseDB:
 
     def learn_merchant_category(self, merchant, category):
         """Impara o aggiorna associazione merchant -> categoria"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
 
         # Verifica se esiste già
-        cursor.execute("SELECT usage_count FROM merchant_categories WHERE merchant = ?", (merchant,))
+        cursor.execute("SELECT usage_count FROM merchant_categories WHERE merchant = %s", (merchant,))
         result = cursor.fetchone()
 
         if result:
             # Aggiorna categoria e incrementa contatore
             cursor.execute(
-                "UPDATE merchant_categories SET category = ?, usage_count = usage_count + 1, last_used = CURRENT_TIMESTAMP WHERE merchant = ?",
+                "UPDATE merchant_categories SET category = %s, usage_count = usage_count + 1, last_used = CURRENT_TIMESTAMP WHERE merchant = %s",
                 (category, merchant)
             )
         else:
             # Inserisci nuovo
             cursor.execute(
-                "INSERT INTO merchant_categories (merchant, category) VALUES (?, ?)",
+                "INSERT INTO merchant_categories (merchant, category) VALUES (%s, %s)",
                 (merchant, category)
             )
 
@@ -389,16 +397,16 @@ class ExpenseDB:
 
     def get_learned_category(self, merchant):
         """Ottieni categoria appresa per un merchant"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT category FROM merchant_categories WHERE merchant = ?", (merchant,))
+        cursor.execute("SELECT category FROM merchant_categories WHERE merchant = %s", (merchant,))
         result = cursor.fetchone()
         conn.close()
         return result[0] if result else None
 
     def get_all_learned_merchants(self):
         """Ottieni tutte le associazioni merchant -> categoria"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         df = pd.read_sql_query(
             "SELECT merchant, category, usage_count, last_used FROM merchant_categories ORDER BY usage_count DESC",
             conn
@@ -408,9 +416,9 @@ class ExpenseDB:
 
     def delete_learned_merchant(self, merchant):
         """Elimina un'associazione merchant -> categoria appresa"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM merchant_categories WHERE merchant = ?", (merchant,))
+        cursor.execute("DELETE FROM merchant_categories WHERE merchant = %s", (merchant,))
         conn.commit()
         conn.close()
 
@@ -418,21 +426,21 @@ class ExpenseDB:
 
     def add_recurring_expense(self, name, category, amount, frequency, day_of_period, start_date, notes=''):
         """Aggiunge una nuova spesa ricorrente"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO recurring_expenses (name, category, amount, frequency, day_of_period, start_date, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (name, category, amount, frequency, day_of_period, start_date, notes))
         conn.commit()
         conn.close()
 
     def get_recurring_expenses(self, active_only=True):
         """Recupera tutte le spese ricorrenti"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         query = "SELECT * FROM recurring_expenses"
         if active_only:
-            query += " WHERE active = 1"
+            query += " WHERE active = TRUE"
         query += " ORDER BY name"
         df = pd.read_sql_query(query, conn)
         conn.close()
@@ -440,45 +448,45 @@ class ExpenseDB:
 
     def get_recurring_expense_by_id(self, rec_id):
         """Recupera una spesa ricorrente specifica"""
-        conn = sqlite3.connect(self.db_path)
-        df = pd.read_sql_query("SELECT * FROM recurring_expenses WHERE id = ?", conn, params=(rec_id,))
+        conn = self._get_conn()
+        df = pd.read_sql_query("SELECT * FROM recurring_expenses WHERE id = %s", conn, params=(rec_id,))
         conn.close()
         return df.iloc[0] if len(df) > 0 else None
 
     def update_recurring_expense(self, rec_id, name, category, amount, frequency, day_of_period, start_date, notes=''):
         """Aggiorna una spesa ricorrente"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute('''
             UPDATE recurring_expenses
-            SET name = ?, category = ?, amount = ?, frequency = ?, day_of_period = ?, start_date = ?, notes = ?
-            WHERE id = ?
+            SET name = %s, category = %s, amount = %s, frequency = %s, day_of_period = %s, start_date = %s, notes = %s
+            WHERE id = %s
         ''', (name, category, amount, frequency, day_of_period, start_date, notes, rec_id))
         conn.commit()
         conn.close()
 
     def toggle_recurring_expense(self, rec_id, active):
         """Attiva/disattiva una spesa ricorrente"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("UPDATE recurring_expenses SET active = ? WHERE id = ?", (1 if active else 0, rec_id))
+        cursor.execute("UPDATE recurring_expenses SET active = %s WHERE id = %s", (active, rec_id))
         conn.commit()
         conn.close()
 
     def delete_recurring_expense(self, rec_id):
         """Elimina una spesa ricorrente"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM recurring_expenses WHERE id = ?", (rec_id,))
+        cursor.execute("DELETE FROM recurring_expenses WHERE id = %s", (rec_id,))
         conn.commit()
         conn.close()
 
     def get_recurring_expenses_for_month(self, year, month):
         """Recupera le spese ricorrenti previste per un dato mese"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         df = pd.read_sql_query('''
             SELECT * FROM recurring_expenses
-            WHERE active = 1 AND (frequency = 'mensile' OR frequency = 'annuale')
+            WHERE active = TRUE AND (frequency = 'mensile' OR frequency = 'annuale')
         ''', conn)
         conn.close()
 
@@ -557,23 +565,23 @@ class ExpenseDB:
         if not pattern:
             return  # Evita pattern vuoti
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
 
         # Verifica se esiste già
-        cursor.execute("SELECT learned_count FROM learned_income_patterns WHERE description_pattern = ?", (pattern,))
+        cursor.execute("SELECT learned_count FROM learned_income_patterns WHERE description_pattern = %s", (pattern,))
         result = cursor.fetchone()
 
         if result:
             # Aggiorna categoria e incrementa contatore
             cursor.execute(
-                "UPDATE learned_income_patterns SET category = ?, learned_count = learned_count + 1, last_updated = CURRENT_TIMESTAMP WHERE description_pattern = ?",
+                "UPDATE learned_income_patterns SET category = %s, learned_count = learned_count + 1, last_updated = CURRENT_TIMESTAMP WHERE description_pattern = %s",
                 (category, pattern)
             )
         else:
             # Inserisci nuovo pattern
             cursor.execute(
-                "INSERT INTO learned_income_patterns (description_pattern, category) VALUES (?, ?)",
+                "INSERT INTO learned_income_patterns (description_pattern, category) VALUES (%s, %s)",
                 (pattern, category)
             )
 
@@ -597,11 +605,11 @@ class ExpenseDB:
         if not pattern:
             return None
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
 
         # Cerca match esatto prima
-        cursor.execute("SELECT category FROM learned_income_patterns WHERE description_pattern = ?", (pattern,))
+        cursor.execute("SELECT category FROM learned_income_patterns WHERE description_pattern = %s", (pattern,))
         result = cursor.fetchone()
 
         if result:
@@ -630,7 +638,7 @@ class ExpenseDB:
 
     def get_all_learned_income_patterns(self):
         """Ottieni tutti i pattern entrate appresi"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         df = pd.read_sql_query(
             "SELECT description_pattern, category, learned_count, last_updated FROM learned_income_patterns ORDER BY learned_count DESC",
             conn
@@ -640,8 +648,8 @@ class ExpenseDB:
 
     def delete_learned_income_pattern(self, pattern):
         """Elimina un pattern entrata appreso"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._get_conn()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM learned_income_patterns WHERE description_pattern = ?", (pattern,))
+        cursor.execute("DELETE FROM learned_income_patterns WHERE description_pattern = %s", (pattern,))
         conn.commit()
         conn.close()

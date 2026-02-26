@@ -4,7 +4,6 @@ Gestione backup e ripristino completo del database
 """
 
 import pandas as pd
-import sqlite3
 import zipfile
 import json
 from io import BytesIO
@@ -12,14 +11,17 @@ from datetime import datetime
 import streamlit as st
 
 
-def create_full_backup(db_path):
+def create_full_backup(db):
     """
     Crea un backup completo in formato ZIP
+
+    Args:
+        db: istanza di ExpenseDB
 
     Returns:
         BytesIO: Buffer contenente il file ZIP
     """
-    conn = sqlite3.connect(db_path)
+    conn = db._get_conn()
 
     # Crea buffer in memoria per il ZIP
     zip_buffer = BytesIO()
@@ -40,7 +42,7 @@ def create_full_backup(db_path):
             merchants = pd.read_sql_query("SELECT * FROM merchant_categories", conn)
             merchants_csv = merchants.to_csv(index=False)
             zip_file.writestr('merchants.csv', merchants_csv)
-        except:
+        except Exception:
             # Se la tabella non esiste ancora, crea file vuoto
             zip_file.writestr('merchants.csv', 'merchant,category,usage_count,last_used\n')
 
@@ -49,7 +51,7 @@ def create_full_backup(db_path):
             recurring = pd.read_sql_query("SELECT * FROM recurring_expenses", conn)
             recurring_csv = recurring.to_csv(index=False)
             zip_file.writestr('recurring_expenses.csv', recurring_csv)
-        except:
+        except Exception:
             # Tabella non esiste ancora
             pass
 
@@ -122,19 +124,19 @@ def extract_backup_info(uploaded_zip):
         return None
 
 
-def restore_backup(uploaded_zip, db_path, mode='replace'):
+def restore_backup(uploaded_zip, db, mode='replace'):
     """
     Ripristina il backup
 
     Args:
         uploaded_zip: File ZIP caricato
-        db_path: Percorso database
+        db: istanza di ExpenseDB
         mode: 'replace' (sostituisce tutto) o 'merge' (aggiunge solo nuovi dati)
 
     Returns:
         dict: Statistiche sul ripristino
     """
-    conn = sqlite3.connect(db_path)
+    conn = db._get_conn()
     cursor = conn.cursor()
     stats = {'transactions': 0, 'categories': 0, 'merchants': 0, 'recurring': 0}
 
@@ -147,11 +149,11 @@ def restore_backup(uploaded_zip, db_path, mode='replace'):
                 cursor.execute("DELETE FROM categories")
                 try:
                     cursor.execute("DELETE FROM merchant_categories")
-                except:
+                except Exception:
                     pass
                 try:
                     cursor.execute("DELETE FROM recurring_expenses")
-                except:
+                except Exception:
                     pass
                 conn.commit()
 
@@ -164,12 +166,14 @@ def restore_backup(uploaded_zip, db_path, mode='replace'):
                     # Evita duplicati
                     existing = pd.read_sql_query("SELECT date, description, amount FROM transactions", conn)
                     if len(existing) > 0:
-                        existing['key'] = existing['date'] + '|' + existing['description'] + '|' + existing['amount'].astype(str)
-                        trans_df['key'] = trans_df['date'] + '|' + trans_df['description'] + '|' + trans_df['amount'].astype(str)
+                        existing['key'] = existing['date'].astype(str) + '|' + existing['description'] + '|' + existing['amount'].astype(str)
+                        trans_df['key'] = trans_df['date'].astype(str) + '|' + trans_df['description'] + '|' + trans_df['amount'].astype(str)
                         trans_df = trans_df[~trans_df['key'].isin(existing['key'])].drop(columns=['key'])
 
                 if len(trans_df) > 0:
-                    trans_df.to_sql('transactions', conn, if_exists='append', index=False)
+                    # Rimuovi colonna id se presente (auto-generata dal DB)
+                    trans_df = trans_df.drop(columns=['id'], errors='ignore')
+                    trans_df.to_sql('transactions', db.engine, if_exists='append', index=False)
                     stats['transactions'] = len(trans_df)
 
             # 2. Ripristina categorie
@@ -183,7 +187,8 @@ def restore_backup(uploaded_zip, db_path, mode='replace'):
                     cat_df = cat_df[~cat_df['name'].isin(existing_cats['name'])]
 
                 if len(cat_df) > 0:
-                    cat_df.to_sql('categories', conn, if_exists='append', index=False)
+                    cat_df = cat_df.drop(columns=['id'], errors='ignore')
+                    cat_df.to_sql('categories', db.engine, if_exists='append', index=False)
                     stats['categories'] = len(cat_df)
 
             # 3. Ripristina merchant
@@ -196,11 +201,12 @@ def restore_backup(uploaded_zip, db_path, mode='replace'):
                         try:
                             existing_merch = pd.read_sql_query("SELECT merchant FROM merchant_categories", conn)
                             merch_df = merch_df[~merch_df['merchant'].isin(existing_merch['merchant'])]
-                        except:
+                        except Exception:
                             pass
 
                     if len(merch_df) > 0:
-                        merch_df.to_sql('merchant_categories', conn, if_exists='append', index=False)
+                        merch_df = merch_df.drop(columns=['id'], errors='ignore')
+                        merch_df.to_sql('merchant_categories', db.engine, if_exists='append', index=False)
                         stats['merchants'] = len(merch_df)
 
             # 4. Ripristina ricorrenti
@@ -213,14 +219,14 @@ def restore_backup(uploaded_zip, db_path, mode='replace'):
                         try:
                             existing_rec = pd.read_sql_query("SELECT name FROM recurring_expenses", conn)
                             rec_df = rec_df[~rec_df['name'].isin(existing_rec['name'])]
-                        except:
+                        except Exception:
                             pass
 
                     if len(rec_df) > 0:
-                        rec_df.to_sql('recurring_expenses', conn, if_exists='append', index=False)
+                        rec_df = rec_df.drop(columns=['id'], errors='ignore')
+                        rec_df.to_sql('recurring_expenses', db.engine, if_exists='append', index=False)
                         stats['recurring'] = len(rec_df)
 
-        conn.commit()
         return stats
 
     except Exception as e:
