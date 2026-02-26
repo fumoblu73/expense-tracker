@@ -58,7 +58,7 @@ def create_full_backup(db):
         # 5. Crea metadata
         metadata = {
             'backup_date': datetime.now().isoformat(),
-            'app_version': '1.0',
+            'app_version': '2.0.0',
             'transaction_count': len(transactions),
             'category_count': len(categories),
             'format_version': '1.0'
