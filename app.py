@@ -162,13 +162,13 @@ db = get_database()
 @st.cache_data(ttl=300)
 def _get_transactions():
     """Carica transazioni con cache 5 minuti. Invalidare con _get_transactions.clear()"""
-    return _get_transactions()
+    return db.get_all_transactions()
 
 
 @st.cache_data(ttl=600)
 def _get_categories():
     """Carica categorie con cache 10 minuti. Invalidare con _get_categories.clear()"""
-    return _get_categories()
+    return db.get_categories()
 
 
 # Esegui migrazione icone automaticamente (solo la prima volta per sessione)
