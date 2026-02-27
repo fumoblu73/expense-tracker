@@ -63,47 +63,130 @@ st.set_page_config(
 # Carica Font Awesome CDN
 st.markdown(get_fontawesome_cdn(), unsafe_allow_html=True)
 
-# CSS personalizzato per mobile
+# CSS compatto mobile-first
 st.markdown("""
 <style>
-    /* Migliora l'esperienza mobile */
+    /* ── Contenitore principale ───────────────────────────────────────── */
+    .block-container {
+        padding-top: 0.8rem !important;
+        padding-bottom: 1rem !important;
+        padding-left: 1.2rem !important;
+        padding-right: 1.2rem !important;
+        max-width: 100% !important;
+    }
+
+    /* ── Titoli più compatti ──────────────────────────────────────────── */
+    h1 { font-size: 1.5rem !important; margin-bottom: 0.4rem !important; }
+    h2 { font-size: 1.2rem !important; margin-bottom: 0.3rem !important; }
+    h3 { font-size: 1.05rem !important; margin-bottom: 0.3rem !important; }
+
+    /* ── Metriche ─────────────────────────────────────────────────────── */
+    [data-testid="metric-container"] {
+        padding: 0.5rem 0.6rem !important;
+        border-radius: 6px;
+    }
+    [data-testid="metric-container"] label {
+        font-size: 0.78rem !important;
+    }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] {
+        font-size: 1.15rem !important;
+    }
+    [data-testid="metric-container"] [data-testid="stMetricDelta"] {
+        font-size: 0.75rem !important;
+    }
+
+    /* ── Expander ─────────────────────────────────────────────────────── */
+    .streamlit-expanderHeader {
+        font-size: 0.9rem !important;
+        padding: 0.45rem 0.6rem !important;
+    }
+    .streamlit-expanderContent {
+        padding: 0.5rem 0.6rem !important;
+    }
+
+    /* ── Tabelle ──────────────────────────────────────────────────────── */
+    .stDataFrame, .stDataFrame td, .stDataFrame th {
+        font-size: 0.82rem !important;
+    }
+
+    /* ── Pulsanti ─────────────────────────────────────────────────────── */
     .stButton button {
-        width: 100%;
-        height: 50px;
-        font-size: 16px;
-        font-weight: bold;
+        height: 42px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        padding: 0 0.8rem;
     }
 
+    /* ── Divider ──────────────────────────────────────────────────────── */
+    hr {
+        margin: 0.5rem 0 !important;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────────────────── */
+    [data-testid="stSidebar"] {
+        min-width: 190px !important;
+        max-width: 220px !important;
+    }
+    [data-testid="stSidebar"] h1 {
+        font-size: 1.1rem !important;
+        margin-bottom: 0.3rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="metric-container"] {
+        padding: 0.2rem 0.3rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="metric-container"] label {
+        font-size: 0.72rem !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+        font-size: 0.95rem !important;
+    }
+
+    /* ── File uploader ────────────────────────────────────────────────── */
     .stFileUploader label {
-        font-size: 18px;
-        font-weight: bold;
+        font-size: 0.95rem;
+        font-weight: 600;
     }
 
-    /* Card stile migliore */
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 10px 0;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-
-    /* Spacing migliore su mobile */
-    @media (max-width: 768px) {
-        .block-container {
-            padding: 1rem;
-        }
-    }
-
-    /* Header personalizzato */
+    /* ── Card header ──────────────────────────────────────────────────── */
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 30px;
-        border-radius: 10px;
+        padding: 10px 16px;
+        border-radius: 8px;
         text-align: center;
-        margin-bottom: 30px;
+        margin-bottom: 10px;
+    }
+    .main-header h1 {
+        font-size: 1.2rem !important;
+        margin: 0 !important;
+    }
+    .main-header p {
+        font-size: 0.8rem;
+        margin: 2px 0 0 0;
+        opacity: 0.9;
+    }
+
+    /* ── Mobile (max 768px) ───────────────────────────────────────────── */
+    @media (max-width: 768px) {
+        .block-container {
+            padding: 0.5rem 0.6rem !important;
+        }
+        h1 { font-size: 1.25rem !important; }
+        h2 { font-size: 1.05rem !important; }
+        h3 { font-size: 0.95rem !important; }
+        [data-testid="metric-container"] label {
+            font-size: 0.72rem !important;
+        }
+        [data-testid="metric-container"] [data-testid="stMetricValue"] {
+            font-size: 1rem !important;
+        }
+        .stButton button {
+            height: 38px;
+            font-size: 0.85rem;
+        }
+        .streamlit-expanderHeader {
+            font-size: 0.82rem !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -212,8 +295,7 @@ def main():
 
     # Sidebar per navigazione
     with st.sidebar:
-        st.image("https://em-content.zobj.net/thumbs/240/apple/354/money-bag_1f4b0.png", width=80)
-        st.title("Menu")
+        st.title("💰 Menu")
 
         page = st.radio(
             "Navigazione",
@@ -284,23 +366,18 @@ def show_dashboard():
     current_month = pd.Period.now('M')
     month_transactions = transactions[transactions['date'].dt.to_period('M') == current_month]
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
+    total_month = month_transactions['amount'].sum()
+    count_month = len(month_transactions)
+    avg_transaction = month_transactions['amount'].mean() if count_month > 0 else 0
+    days_in_month = datetime.now().day
+    daily_avg = total_month / days_in_month if days_in_month > 0 else 0
 
     with col1:
-        total_month = month_transactions['amount'].sum()
-        st.metric("Spesa Mese Corrente", format_currency_ita(total_month))
-
-    with col2:
-        count_month = len(month_transactions)
-        st.metric("Transazioni Mese", count_month)
-
-    with col3:
-        avg_transaction = month_transactions['amount'].mean() if len(month_transactions) > 0 else 0
+        st.metric("Spesa Mese", format_currency_ita(total_month))
         st.metric("Media Transazione", format_currency_ita(avg_transaction))
-
-    with col4:
-        days_in_month = datetime.now().day
-        daily_avg = total_month / days_in_month if days_in_month > 0 else 0
+    with col2:
+        st.metric("Transazioni", count_month)
         st.metric("Media Giornaliera", format_currency_ita(daily_avg))
 
     st.divider()
