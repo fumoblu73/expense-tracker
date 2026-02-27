@@ -19,12 +19,12 @@ class ExpenseDB:
     def __init__(self):
         self.database_url = st.secrets["database"]["url"]
         # SQLAlchemy engine per pandas to_sql()
-        self.engine = create_engine(self.database_url)
+        self.engine = create_engine(self.database_url, connect_args={"sslmode": "require"})
         self.init_database()
 
     def _get_conn(self):
         """Restituisce una nuova connessione psycopg2"""
-        return psycopg2.connect(self.database_url)
+        return psycopg2.connect(self.database_url, sslmode='require')
 
     def init_database(self):
         """Inizializza il database con le tabelle necessarie"""
