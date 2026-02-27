@@ -96,10 +96,13 @@ def auto_categorize_by_keywords(description, amount_sign=None, db=None):
 
     # PRIORITÀ MASSIMA: Prelievi bancomat identificati per numero carta
     # *1282 = Emanuele, *4951 = Cinzia
+    # Usa regex su "carta XXXXXXXX" per evitare false match su ABI/date/altri campi
     if 'prel' in desc_lower:
-        if '1282' in desc_lower:
+        card_match = re.search(r'carta\s+(\d+)', desc_lower)
+        card_num = card_match.group(1) if card_match else ''
+        if '1282' in card_num:
             return 'Prelievo Emanuele'
-        elif '4951' in desc_lower:
+        elif '4951' in card_num:
             return 'Prelievo Cinzia'
 
     # PRIMA: Se è un'entrata, categorizza con categorie entrate specifiche
@@ -261,6 +264,22 @@ def smart_categorize_transactions(df, db):
     for _, row in df.iterrows():
         description = row.get('description', '')
         amount_sign = row.get('amount_sign', 'expense')
+        desc_lower = str(description).lower() if description else ''
+
+        # PRIORITÀ ASSOLUTA: prelievi bancomat — PRIMA del merchant lookup
+        # "carta" viene estratta come merchant e potrebbe essere in merchant_map
+        # con categoria errata (es. Emanuele sovrascrive Cinzia)
+        if 'prel' in desc_lower:
+            card_match = re.search(r'carta\s+(\d+)', desc_lower)
+            card_num = card_match.group(1) if card_match else ''
+            if '1282' in card_num:
+                merchants.append(None)
+                categories.append('Prelievo Emanuele')
+                continue
+            elif '4951' in card_num:
+                merchants.append(None)
+                categories.append('Prelievo Cinzia')
+                continue
 
         merchant = extract_merchant(description)
         merchants.append(merchant)
