@@ -189,7 +189,8 @@ def main():
                 "💳 Spese Ricorrenti",
                 "📊 Report & Analisi",
                 "🔮 Previsioni",
-                "⚙️ Impostazioni"
+                "⚙️ Impostazioni",
+                "❓ Guida"
             ],
             label_visibility="collapsed"
         )
@@ -222,6 +223,8 @@ def main():
         show_forecasting_page()
     elif "Impostazioni" in page:
         show_settings_page()
+    elif "Guida" in page:
+        show_help_page()
 
 
 def show_dashboard():
@@ -1696,13 +1699,13 @@ def show_settings_page():
                 else:
                     st.error("Conferma non corretta")
 
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("ℹ️ Informazioni App")
 
         st.markdown("""
         ### 💰 Family Expense Tracker
 
-        **Versione:** 1.0.0
+        **Versione:** 2.0.0
 
         **Caratteristiche:**
         - ✅ Importazione CSV automatica
@@ -1717,7 +1720,7 @@ def show_settings_page():
 
         **Tecnologie:**
         - Python + Streamlit
-        - SQLite Database
+        - PostgreSQL (Supabase)
         - Plotly Charts
         - Pandas Data Analysis
 
@@ -1735,9 +1738,283 @@ def show_settings_page():
 
         **Supporto:**
 
-        Per domande o problemi, consulta la documentazione o contatta il supporto.
+        Per domande o problemi, consulta la sezione ❓ Guida nel menu laterale.
 
         **Made with ❤️ for families**
+        """)
+
+
+def show_help_page():
+    """Pagina guida completa dell'app"""
+    st.title("❓ Guida all'Uso")
+
+    st.info("Espandi le sezioni per leggere la guida dettagliata di ogni funzione.")
+
+    # ── GUIDA RAPIDA ──────────────────────────────────────────────────────────
+    with st.expander("🚀 Guida Rapida — Inizia in 5 minuti", expanded=True):
+        st.markdown("""
+        ### Come iniziare
+
+        1. **Carica il tuo CSV bancario** → vai su *📤 Carica Dati* e importa l'estratto conto della tua banca.
+        2. **Rivedi le categorie** → l'app assegna automaticamente una categoria a ogni transazione. Correggila se necessario in *🏷️ Gestisci Categorie*.
+        3. **Imposta i budget mensili** → in *🏷️ Gestisci Categorie* inserisci quanto vuoi spendere al mese per ogni voce (es. Alimentari €500).
+        4. **Monitora la Dashboard** → ogni giorno controlla il riepilogo, il budget disponibile e gli alert.
+        5. **Aggiungi le spese ricorrenti** → in *💳 Spese Ricorrenti* inserisci abbonamenti e bollette fisse così vengono detratti automaticamente dal budget disponibile.
+
+        ---
+
+        ### Formato CSV accettato
+
+        L'app accetta i CSV esportati dalle principali banche italiane. Il file deve contenere almeno queste colonne (i nomi possono variare, l'app le riconosce automaticamente):
+
+        | Colonna | Descrizione |
+        |---|---|
+        | Data | Data della transazione (es. `25/01/2025` o `2025-01-25`) |
+        | Descrizione / Causale | Testo del movimento |
+        | Importo / Dare / Avere | Valore in euro |
+        | Categoria (opzionale) | Categoria già assegnata dalla banca |
+
+        > **Tip**: Se la tua banca esporta Dare e Avere separati, l'app li unifica automaticamente in un unico campo Importo.
+        """)
+
+    # ── DASHBOARD ─────────────────────────────────────────────────────────────
+    with st.expander("🏠 Dashboard"):
+        st.markdown("""
+        La Dashboard è la schermata principale. Si aggiorna automaticamente ogni volta che aggiungi dati.
+
+        ### Metriche in alto
+        | Metrica | Cosa mostra |
+        |---|---|
+        | **Spesa Mese Corrente** | Totale speso nel mese in corso |
+        | **Transazioni Mese** | Numero di movimenti nel mese corrente |
+        | **Media Transazione** | Importo medio per singola spesa |
+        | **Media Giornaliera** | Spesa media giornaliera dall'inizio del mese |
+
+        ### Budget Disponibile
+        Mostra quanto puoi ancora spendere fino a fine mese, calcolato così:
+
+        ```
+        Disponibile = Budget Totale − Speso fino a oggi − Spese Ricorrenti ancora da pagare
+        ```
+
+        - 🟢 **Verde**: budget ampiamente disponibile
+        - 🟠 **Arancione**: meno del 10% del budget rimanente
+        - 🔴 **Rosso**: budget superato
+
+        Espandi *"Dettaglio Calcolo"* per vedere la formula applicata e la spesa giornaliera consigliata per i giorni rimanenti.
+
+        ### Spese Ricorrenti
+        Mostra quante spese ricorrenti del mese sono già state pagate (✅) e quante sono ancora in attesa (⏳). Il totale mensile è calcolato includendo anche le spese annuali ripartite su 12 mesi.
+
+        ### Alert Budget
+        Appare solo se una o più categorie hanno superato le soglie di attenzione:
+        - ⚡ **75%** del budget → avviso giallo
+        - ⚠️ **90%** del budget → alert arancione
+        - 🚨 **100%** del budget → alert rosso (budget sforato)
+
+        ### Grafici
+        - **Andamento mensile**: confronto spese mese per mese
+        - **Ripartizione categorie**: grafico a torta con la distribuzione delle spese
+        - **Budget vs Reale**: barre affiancate per ogni categoria
+        """)
+
+    # ── CARICA DATI ───────────────────────────────────────────────────────────
+    with st.expander("📤 Carica Dati"):
+        st.markdown("""
+        ### Importazione CSV
+        1. Esporta il file CSV dall'home banking della tua banca
+        2. Caricalo nella sezione "Carica File CSV"
+        3. L'app mostra un'anteprima delle prime righe: verifica che le colonne siano corrette
+        4. Clicca **"Importa Transazioni"** per salvare nel database
+
+        L'app rileva automaticamente i duplicati: se carichi due volte lo stesso CSV, le transazioni già presenti non vengono reimportate.
+
+        ### Categorizzazione Automatica
+        Ogni transazione viene analizzata e assegnata a una categoria in base a:
+        - **Pattern nel testo**: "ESSELUNGA", "COOP", "LIDL" → *Alimentari*; "ENI", "IP", "AGIP" → *Trasporti*; ecc.
+        - **Merchant appresi**: se hai già categorizzato manualmente una spesa da "NETFLIX", la prossima volta viene assegnata automaticamente a *Svago*
+        - **Entrate**: importi positivi vengono assegnati alla categoria *Entrate*
+
+        ### Correzione Categorie
+        Dopo l'importazione, puoi correggere le categorie nella tabella. L'app impara dalla correzione e la applicherà automaticamente nelle importazioni future dallo stesso merchant.
+
+        ### Aggiunta Manuale
+        Puoi aggiungere singole transazioni manualmente (contanti, pagamenti non tracciati) usando il form nella sezione "Aggiungi Transazione Manuale".
+        """)
+
+    # ── CATEGORIE ─────────────────────────────────────────────────────────────
+    with st.expander("🏷️ Gestisci Categorie"):
+        st.markdown("""
+        ### Categorie di Default
+        Al primo avvio l'app crea automaticamente 11 categorie predefinite con budget suggeriti:
+
+        | Categoria | Budget Default |
+        |---|---|
+        | Alimentari | €500/mese |
+        | Trasporti | €200/mese |
+        | Utenze | €300/mese |
+        | Ristoranti | €250/mese |
+        | Shopping | €200/mese |
+        | Salute | €150/mese |
+        | Svago | €150/mese |
+        | Casa | €400/mese |
+        | Entrate | — (nessun budget) |
+        | Altro | €100/mese |
+        | Non Categorizzato | — |
+
+        ### Impostare i Budget
+        Per ogni categoria puoi definire un budget mensile massimo. Questo valore viene usato per:
+        - Calcolare il **budget disponibile** in Dashboard
+        - Generare gli **alert** quando ti avvicini al limite
+        - Produrre i grafici **Budget vs Reale** nei Report
+
+        ### Creare Nuove Categorie
+        Usa il pulsante **"Aggiungi Categoria"** per creare categorie personalizzate (es. *Viaggi*, *Sport*, *Animali*). Per ogni categoria scegli:
+        - **Nome**: identificativo univoco
+        - **Budget mensile**: importo massimo (0 = nessun limite)
+        - **Colore**: usato nei grafici
+        - **Icona**: scegli tra centinaia di icone Font Awesome
+
+        ### Assegnare Transazioni
+        Dalla lista transazioni puoi cambiare la categoria di un movimento con un menu a tendina. La modifica viene salvata immediatamente.
+        """)
+
+    # ── SPESE RICORRENTI ──────────────────────────────────────────────────────
+    with st.expander("💳 Spese Ricorrenti"):
+        st.markdown("""
+        Le spese ricorrenti sono costi fissi che si ripetono regolarmente: affitto, abbonamenti, bollette, rate.
+
+        ### Frequenze Supportate
+        | Frequenza | Comportamento |
+        |---|---|
+        | **Mensile** | Si ripete ogni mese nel giorno specificato |
+        | **Settimanale** | Si ripete ogni settimana |
+        | **Annuale** | Si ripete una volta l'anno (es. assicurazione auto) |
+
+        ### Come Funziona il Tracking
+        L'app confronta le spese ricorrenti configurate con le transazioni importate nel mese corrente:
+        - ✅ **Pagata**: trovata una transazione corrispondente nel mese
+        - ⏳ **In attesa**: non ancora trovata nel CSV del mese corrente
+
+        Le spese ricorrenti **in attesa** vengono sottratte dal budget disponibile in Dashboard, così sai già quanto ti rimarrà dopo averle pagate.
+
+        ### Tip
+        Per le spese annuali (es. bollo auto €200 a marzo), l'app le include nel calcolo del budget disponibile solo nel mese in cui cadono. Nel conteggio del totale mensile ricorrente vengono divise per 12 per mostrare il costo medio mensile.
+        """)
+
+    # ── REPORT & ANALISI ──────────────────────────────────────────────────────
+    with st.expander("📊 Report & Analisi"):
+        st.markdown("""
+        La sezione Report offre analisi approfondite con filtri temporali.
+
+        ### Filtri Disponibili
+        - **Mese corrente / Mese precedente**
+        - **Ultimi 3 mesi / Ultimo anno**
+        - **Periodo personalizzato**: scegli data inizio e fine liberamente
+
+        ### Grafici Disponibili
+        | Grafico | Descrizione |
+        |---|---|
+        | **Andamento Mensile** | Spese totali mese per mese, con trend |
+        | **Ripartizione Categorie** | Torta con percentuale per categoria |
+        | **Budget vs Reale** | Barre affiancate: quanto hai speso vs quanto avevi pianificato |
+        | **Entrate vs Uscite** | Saldo mensile: entrate in verde, uscite in rosso |
+        | **Top Spese** | Le 10 transazioni più costose del periodo |
+        | **Trend Categoria** | Evoluzione nel tempo di una singola categoria |
+
+        ### Anomalie
+        L'app rileva automaticamente le transazioni anomale rispetto alla tua media storica. Una spesa è segnalata come anomala se supera significativamente il valore tipico per quella categoria.
+
+        ### Export via Email
+        Nella sezione *Report* puoi inviare un report mensile completo via email. Il report include:
+        - Totale speso, numero transazioni, media giornaliera
+        - Top categorie
+        - Alert budget attivi
+        - Consigli personalizzati
+
+        > Per usare questa funzione devi configurare Gmail in *⚙️ Impostazioni → Email*.
+        """)
+
+    # ── PREVISIONI ────────────────────────────────────────────────────────────
+    with st.expander("🔮 Previsioni"):
+        st.markdown("""
+        La sezione Previsioni analizza il tuo storico per stimare le spese future.
+
+        ### Media Mobile
+        Usa la **media mobile** degli ultimi N mesi per proiettare la spesa del mese corrente e di quelli futuri. Più mesi includi nella media, più la previsione è "stabile" ma meno reattiva ai cambiamenti recenti.
+
+        ### Statistiche Storiche
+        Per ogni categoria vengono calcolate:
+        - **Media mensile**: spesa tipica al mese
+        - **Deviazione standard**: quanto varia la spesa
+        - **Minimo / Massimo**: i mesi migliori e peggiori
+        - **Trend**: la spesa sta aumentando o diminuendo nel tempo?
+
+        ### Confronto Periodi
+        Confronta due periodi diversi (es. *Gennaio-Giugno 2024* vs *Gennaio-Giugno 2025*) per vedere dove hai migliorato e dove hai speso di più.
+
+        ### Quando le previsioni sono attendibili?
+        Le previsioni funzionano meglio con almeno **3-6 mesi** di dati storici. Con meno dati, i valori sono indicativi.
+        """)
+
+    # ── IMPOSTAZIONI ──────────────────────────────────────────────────────────
+    with st.expander("⚙️ Impostazioni"):
+        st.markdown("""
+        ### Backup & Ripristino
+        È consigliato fare un backup periodico (almeno una volta al mese).
+
+        - **Backup ZIP**: include tutte le tabelle (transazioni, categorie, merchant appresi, impostazioni). Salva il file su Google Drive, Dropbox o il tuo PC.
+        - **Backup CSV**: solo le transazioni, in formato leggibile da Excel.
+        - **Ripristino — Sostituisci tutto**: cancella il database e lo ricrea dal backup. Utile se vuoi tornare a uno stato precedente.
+        - **Ripristino — Merge**: aggiunge solo le transazioni non ancora presenti, senza cancellare quelle esistenti. Utile per unire dati da dispositivi diversi.
+
+        ### Email
+        Per ricevere report e alert via email configura un account Gmail:
+        1. Attiva la *Verifica in 2 passaggi* su [myaccount.google.com/security](https://myaccount.google.com/security)
+        2. Vai su *Password per le app* e genera una password per "Mail"
+        3. Inserisci email e password nell'apposita sezione
+
+        Usa il pulsante **"Invia Email di Test"** per verificare che la configurazione funzioni.
+
+        ### Database
+        Nella *Zona Pericolosa* puoi eliminare tutte le transazioni (le categorie e le impostazioni vengono mantenute). Questa operazione è irreversibile: scarica sempre un backup prima.
+        """)
+
+    # ── FAQ ───────────────────────────────────────────────────────────────────
+    with st.expander("❓ Domande Frequenti"):
+        st.markdown("""
+        **Posso caricare CSV di banche diverse?**
+        Sì. L'app riconosce automaticamente i formati di Fineco, Intesa Sanpaolo, UniCredit, BancoBPM, Poste Italiane e molte altre. Se il formato non viene riconosciuto, controlla che il CSV abbia almeno le colonne Data, Descrizione e Importo.
+
+        ---
+
+        **Le mie categorie vengono perse se cancello le transazioni?**
+        No. Le categorie e le loro impostazioni sono memorizzate separatamente dalle transazioni. Cancellare le transazioni non tocca le categorie, i budget o i merchant appresi.
+
+        ---
+
+        **Posso usare l'app in famiglia con più persone?**
+        Attualmente l'app ha un unico database condiviso. Tutti gli utenti che accedono allo stesso URL vedono e modificano gli stessi dati. È pensata per un nucleo familiare che condivide le spese.
+
+        ---
+
+        **I dati sono al sicuro?**
+        I dati sono salvati su Supabase (PostgreSQL cloud, data center in Europa). La connessione è cifrata (SSL). Solo chi ha l'URL dell'app può accedere ai dati.
+
+        ---
+
+        **L'app funziona offline?**
+        No, richiede una connessione internet per comunicare con il database cloud.
+
+        ---
+
+        **Come faccio a spostare i dati se cambio account?**
+        Fai un backup ZIP da *⚙️ Impostazioni → Backup*, poi ripristinalo sulla nuova istanza con la modalità "Sostituisci tutto".
+
+        ---
+
+        **Perché alcune transazioni vanno in "Non Categorizzato"?**
+        L'app non ha riconosciuto il merchant o il testo della transazione. Vai in *🏷️ Gestisci Categorie*, assegna manualmente la categoria corretta: l'app imparerà per le importazioni future.
         """)
 
 
