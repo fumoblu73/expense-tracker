@@ -94,6 +94,14 @@ def auto_categorize_by_keywords(description, amount_sign=None, db=None):
 
     desc_lower = str(description).lower()
 
+    # PRIORITÀ MASSIMA: Prelievi bancomat identificati per numero carta
+    # *1282 = Emanuele, *4951 = Cinzia
+    if 'prel' in desc_lower:
+        if '1282' in desc_lower:
+            return 'Prelievo Emanuele'
+        elif '4951' in desc_lower:
+            return 'Prelievo Cinzia'
+
     # PRIMA: Se è un'entrata, categorizza con categorie entrate specifiche
     if amount_sign == 'income':
         return categorize_income(desc_lower, db=db)

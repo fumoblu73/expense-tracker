@@ -164,6 +164,28 @@ if 'icons_migrated' not in st.session_state:
     st.session_state['icons_migrated'] = True
 
 
+def get_quarterly_withdrawals(transactions_df):
+    """Conta prelievi per persona nel trimestre corrente"""
+    now = datetime.now()
+    q = (now.month - 1) // 3          # 0=Q1, 1=Q2, 2=Q3, 3=Q4
+    q_start = q * 3 + 1               # mese iniziale trimestre (1,4,7,10)
+    q_end = q_start + 2               # mese finale trimestre (3,6,9,12)
+
+    df = transactions_df.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    q_df = df[
+        (df['date'].dt.year == now.year) &
+        (df['date'].dt.month >= q_start) &
+        (df['date'].dt.month <= q_end)
+    ]
+
+    return {
+        'Emanuele': int(len(q_df[q_df['category'] == 'Prelievo Emanuele'])),
+        'Cinzia':   int(len(q_df[q_df['category'] == 'Prelievo Cinzia'])),
+        'label':    f"T{q + 1} {now.year}"
+    }
+
+
 def main():
     """Funzione principale dell'app"""
 
@@ -347,6 +369,26 @@ def show_dashboard():
                 st.rerun()
 
     st.divider()
+
+    # ── Prelievi Bancomat Trimestrali ─────────────────────────────────────
+    w = get_quarterly_withdrawals(transactions)
+    has_any = w['Emanuele'] > 0 or w['Cinzia'] > 0
+    with st.expander(f"🏧 Prelievi Bancomat — {w['label']}", expanded=has_any):
+        col1, col2 = st.columns(2)
+        for col, name in [(col1, 'Emanuele'), (col2, 'Cinzia')]:
+            with col:
+                n = w[name]
+                remaining = max(0, 3 - n)
+                if n == 0:
+                    icon, status = "🟢", "Nessun prelievo effettuato"
+                elif n < 3:
+                    icon, status = "🟡", f"{remaining} prelievo/i gratuito/i rimanente/i"
+                elif n == 3:
+                    icon, status = "🔴", "Limite di 3 prelievi gratuiti raggiunto"
+                else:
+                    icon, status = "⛔", f"⚠️ Superato il limite! ({n - 3} a pagamento)"
+                st.metric(f"{icon} {name}", f"prelievo n. {n} di 3", delta=status,
+                          delta_color="off")
 
     # Alert Budget (nascondibili)
     alerts = check_budget_alerts(transactions, categories, current_month)

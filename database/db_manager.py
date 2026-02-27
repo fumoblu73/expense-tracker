@@ -134,6 +134,8 @@ class ExpenseDB:
             ('Svago', 150, '#BB8FCE', 'fa-film'),
             ('Casa', 400, '#85C1E2', 'fa-house'),
             ('Entrate', 0, '#2ECC71', 'fa-money-bill-wave'),
+            ('Prelievo Emanuele', 0, '#5B9BD5', 'fa-hand-holding-dollar'),
+            ('Prelievo Cinzia', 0, '#ED7D31', 'fa-hand-holding-dollar'),
             ('Altro', 100, '#95A5A6', 'fa-box'),
             ('Non Categorizzato', 0, '#BDC3C7', 'fa-circle-question')
         ]
