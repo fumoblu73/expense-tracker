@@ -225,6 +225,17 @@ class ExpenseDB:
         conn.commit()
         conn.close()
 
+    def bulk_update_category_by_ids(self, ids, category):
+        """Aggiorna la categoria di più transazioni in un unico round-trip"""
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE transactions SET category = %s WHERE id = ANY(%s)",
+            (category, list(ids))
+        )
+        conn.commit()
+        conn.close()
+
     def delete_transaction(self, transaction_id):
         """Elimina una transazione"""
         conn = self._get_conn()

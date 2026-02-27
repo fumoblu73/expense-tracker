@@ -730,7 +730,7 @@ def show_categories_page():
     """Pagina gestione categorie"""
     st.title("🏷️ Categorie")
 
-    tabs = st.tabs(["📋 Visualizza Categorie", "➕ Aggiungi/Modifica Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
+    tabs = st.tabs(["📋 Visualizza Categorie", "⚡ Rapida", "➕ Aggiungi/Modifica Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
 
     categories = _get_categories(db)
 
@@ -767,6 +767,54 @@ def show_categories_page():
                     st.divider()
 
     with tabs[1]:
+        st.subheader("⚡ Categorizzazione Rapida per Merchant")
+
+        transactions_all = _get_transactions(db)
+        uncategorized = transactions_all[transactions_all['category'] == 'Non Categorizzato'].copy()
+
+        if len(uncategorized) == 0:
+            st.success("✅ Nessuna transazione da categorizzare!")
+        else:
+            st.info(f"**{len(uncategorized)} transazioni** non categorizzate — raggruppa per merchant e applica con un click.")
+
+            # Estrai merchant (fallback a descrizione troncata)
+            uncategorized['merchant_key'] = uncategorized['description'].apply(
+                lambda d: extract_merchant(str(d)) or str(d)[:45]
+            )
+
+            # Raggruppa per merchant, conta e raccoglie ID
+            groups = (
+                uncategorized.groupby('merchant_key', sort=False)
+                .agg(count=('id', 'count'), ids=('id', list))
+                .reset_index()
+                .sort_values('count', ascending=False)
+            )
+
+            cat_names = [c for c in categories['name'].tolist() if c != 'Non Categorizzato']
+            st.caption(f"{len(groups)} merchant distinti")
+            st.divider()
+
+            for _, grp in groups.iterrows():
+                col1, col2, col3 = st.columns([4, 3, 1])
+                with col1:
+                    st.markdown(f"**{grp['merchant_key']}**")
+                    st.caption(f"{grp['count']} transazioni")
+                with col2:
+                    sel_cat = st.selectbox(
+                        "cat",
+                        options=cat_names,
+                        key=f"bulk_{grp['merchant_key']}",
+                        label_visibility="collapsed"
+                    )
+                with col3:
+                    if st.button("✅", key=f"apply_{grp['merchant_key']}", help=f"Applica '{sel_cat}' a tutte"):
+                        db.bulk_update_category_by_ids(grp['ids'], sel_cat)
+                        db.add_merchant_category(grp['merchant_key'].lower(), sel_cat)
+                        _get_transactions.clear()
+                        st.rerun()
+                st.divider()
+
+    with tabs[2]:
         st.subheader("Aggiungi Nuova o Modifica Categoria Esistente")
 
         # Selettore modalità: Aggiungi o Modifica
@@ -984,7 +1032,7 @@ def show_categories_page():
             else:
                 st.warning("⚠️ Seleziona un'icona")
 
-    with tabs[2]:
+    with tabs[3]:
         st.subheader("Modifica Budget Categorie")
 
         for _, cat in categories.iterrows():
@@ -1014,7 +1062,7 @@ def show_categories_page():
                     st.success("✅ Salvato!")
                     st.rerun()
 
-    with tabs[3]:
+    with tabs[4]:
         st.subheader("Ricategorizza Transazioni")
 
         transactions = _get_transactions(db)
