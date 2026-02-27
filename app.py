@@ -158,6 +158,19 @@ def migrate_emoji_to_fontawesome(db):
 
 db = get_database()
 
+
+@st.cache_data(ttl=300)
+def _get_transactions():
+    """Carica transazioni con cache 5 minuti. Invalidare con _get_transactions.clear()"""
+    return _get_transactions()
+
+
+@st.cache_data(ttl=600)
+def _get_categories():
+    """Carica categorie con cache 10 minuti. Invalidare con _get_categories.clear()"""
+    return _get_categories()
+
+
 # Esegui migrazione icone automaticamente (solo la prima volta per sessione)
 if 'icons_migrated' not in st.session_state:
     migrate_emoji_to_fontawesome(db)
@@ -220,7 +233,7 @@ def main():
         st.divider()
 
         # Quick stats nella sidebar
-        transactions = db.get_all_transactions()
+        transactions = _get_transactions()
         if len(transactions) > 0:
             st.metric("Totale Transazioni", len(transactions))
             st.metric("Spesa Totale", format_currency_ita(transactions['amount'].sum()))
@@ -253,7 +266,7 @@ def show_dashboard():
     """Pagina dashboard principale"""
     st.title("🏠 Dashboard")
 
-    transactions = db.get_all_transactions()
+    transactions = _get_transactions()
 
     if len(transactions) == 0:
         st.info("""
@@ -265,7 +278,7 @@ def show_dashboard():
 
     # Converti date
     transactions['date'] = pd.to_datetime(transactions['date'])
-    categories = db.get_categories()
+    categories = _get_categories()
 
     # Statistiche rapide
     current_month = pd.Period.now('M')
@@ -598,6 +611,7 @@ def show_upload_page():
                         try:
                             total_transactions = len(df)
                             saved_count = db.insert_transactions(df)
+                            _get_transactions.clear()
                             duplicates_count = total_transactions - saved_count
 
                             if duplicates_count > 0:
@@ -641,7 +655,7 @@ def show_categories_page():
 
     tabs = st.tabs(["📋 Visualizza Categorie", "➕ Aggiungi/Modifica Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
 
-    categories = db.get_categories()
+    categories = _get_categories()
 
     with tabs[0]:
         st.subheader("Categorie Esistenti")
@@ -670,6 +684,7 @@ def show_categories_page():
                         if st.button("🗑️", key=f"del_{cat['name']}", help="Elimina categoria"):
                             if cat['name'] not in ['Non Categorizzato']:
                                 db.delete_category(cat['name'])
+                                _get_categories.clear()
                                 st.rerun()
 
                     st.divider()
@@ -860,6 +875,7 @@ def show_categories_page():
                     if not old_category_name:
                         st.error("❌ Errore: categoria da modificare non trovata")
                     else:
+                        _get_categories.clear()
                         success = db.update_category(
                             old_name=old_category_name,
                             new_name=new_name,
@@ -877,6 +893,7 @@ def show_categories_page():
                             st.error("❌ Errore: nome categoria già esistente")
                 else:
                     # Aggiungi nuova categoria
+                    _get_categories.clear()
                     success = db.add_category(new_name, new_budget, new_color, selected_icon)
                     if success:
                         st.session_state['selected_icon'] = None  # Reset selezione
@@ -916,13 +933,14 @@ def show_categories_page():
             with col3:
                 if st.button("💾", key=f"save_{cat['name']}", help="Salva"):
                     db.update_category_budget(cat['name'], new_budget)
+                    _get_categories.clear()
                     st.success("✅ Salvato!")
                     st.rerun()
 
     with tabs[3]:
         st.subheader("Ricategorizza Transazioni")
 
-        transactions = db.get_all_transactions()
+        transactions = _get_transactions()
 
         if len(transactions) > 0:
             # Converti colonna date in datetime
@@ -1076,6 +1094,7 @@ def show_categories_page():
                             if st.button("💾", key=f"save_cat_{row['id']}", help="Salva"):
                                 # Aggiorna categoria transazione
                                 db.update_transaction_category(row['id'], new_cat)
+                                _get_transactions.clear()
 
                                 # Determina se è entrata o spesa
                                 income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso',
@@ -1147,7 +1166,7 @@ def show_recurring_expenses_page():
     - Ricevere promemoria per spese in scadenza
     """)
 
-    categories = db.get_categories()
+    categories = _get_categories()
     recurring = db.get_recurring_expenses(active_only=False)
 
     tabs = st.tabs(["📋 Lista Ricorrenti", "➕ Aggiungi Nuova"])
@@ -1281,8 +1300,8 @@ def show_reports_page():
     """Pagina report e analisi"""
     st.title("📊 Report & Analisi")
 
-    transactions = db.get_all_transactions()
-    categories = db.get_categories()
+    transactions = _get_transactions()
+    categories = _get_categories()
 
     if len(transactions) == 0:
         st.info("Carica delle transazioni prima di visualizzare i report")
@@ -1513,7 +1532,7 @@ def show_forecasting_page():
     """Pagina previsioni"""
     st.title("🔮 Previsioni & Trend")
 
-    transactions = db.get_all_transactions()
+    transactions = _get_transactions()
 
     if len(transactions) == 0:
         st.info("Carica delle transazioni prima di visualizzare le previsioni")
@@ -1573,7 +1592,7 @@ def show_forecasting_page():
 
     # Raccomandazioni budget
     st.divider()
-    categories = db.get_categories()
+    categories = _get_categories()
     alerts = check_budget_alerts(transactions, categories)
     recommendations = get_budget_recommendations(alerts)
     display_recommendations(recommendations)
@@ -1588,8 +1607,8 @@ def show_settings_page():
     with tabs[0]:
         st.subheader("💾 Backup & Ripristino")
 
-        transactions = db.get_all_transactions()
-        categories = db.get_categories()
+        transactions = _get_transactions()
+        categories = _get_categories()
 
         # Sezione Backup
         st.markdown("### 📥 Crea Backup Completo")
@@ -1691,6 +1710,8 @@ def show_settings_page():
                         # Reset uploaded file position
                         uploaded_backup.seek(0)
                         stats = restore_backup(uploaded_backup, db, mode=restore_mode)
+                        _get_transactions.clear()
+                        _get_categories.clear()
 
                         if stats:
                             st.success("✅ Ripristino completato con successo!")
@@ -1712,7 +1733,7 @@ def show_settings_page():
     with tabs[2]:
         st.subheader("🗑️ Gestione Database")
 
-        transactions = db.get_all_transactions()
+        transactions = _get_transactions()
         st.info(f"📊 Database contiene **{len(transactions)}** transazioni")
 
         st.divider()
@@ -1735,6 +1756,7 @@ def show_settings_page():
                     cursor.execute("DELETE FROM transactions")
                     conn.commit()
                     conn.close()
+                    _get_transactions.clear()
 
                     st.success("✅ Database resettato")
                     st.rerun()
