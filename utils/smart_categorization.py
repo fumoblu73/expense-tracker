@@ -218,38 +218,76 @@ import pandas as pd
 
 def smart_categorize_transactions(df, db):
     """
-    Categorizza intelligentemente tutte le transazioni
-    Usa apprendimento precedente + categorizzazione automatica
+    Categorizza intelligentemente tutte le transazioni.
+    Usa apprendimento precedente + categorizzazione automatica.
 
-    Args:
-        df: DataFrame con transazioni
-        db: Istanza ExpenseDB
-
-    Returns:
-        DataFrame con colonna 'category' aggiornata e 'merchant' estratto
+    Ottimizzazione bulk: carica merchant e income patterns in 2 query totali
+    invece di 1 query per riga (evita N+1 problem su dataset grandi).
     """
+    # ── Carica tutto il DB in memoria con 2 query ──────────────────────────
+    merchant_map = {}  # {merchant_lower: category}
+    try:
+        all_merchants = db.get_all_learned_merchants()
+        if len(all_merchants) > 0:
+            for _, row in all_merchants.iterrows():
+                merchant_map[str(row['merchant']).lower()] = row['category']
+    except Exception:
+        pass
+
+    income_patterns = []  # [(pattern, category)] ordinati per lunghezza desc
+    try:
+        all_income = db.get_all_learned_income_patterns()
+        if len(all_income) > 0:
+            income_patterns = sorted(
+                [(str(r['description_pattern']), r['category']) for _, r in all_income.iterrows()],
+                key=lambda x: len(x[0]),
+                reverse=True
+            )
+    except Exception:
+        pass
+
+    # ── Categorizzazione in-memory (zero query di rete per riga) ───────────
     merchants = []
     categories = []
 
-    for idx, row in df.iterrows():
+    for _, row in df.iterrows():
         description = row.get('description', '')
-        amount = row.get('amount', 0)
         amount_sign = row.get('amount_sign', 'expense')
 
-        # Estrai merchant
         merchant = extract_merchant(description)
         merchants.append(merchant)
 
-        # Prova a recuperare categoria appresa (per SPESE)
+        # Spese: cerca merchant nel dict in-memory
         if amount_sign == 'expense' and merchant:
-            learned_cat = db.get_learned_category(merchant)
+            learned_cat = merchant_map.get(merchant.lower())
             if learned_cat:
                 categories.append(learned_cat)
                 continue
 
-        # Usa categorizzazione automatica (gestisce sia entrate che spese)
-        # Passa db per permettere apprendimento entrate
-        auto_cat = auto_categorize_by_keywords(description, amount_sign, db=db)
+        # Entrate: cerca income pattern in-memory
+        if amount_sign == 'income' and income_patterns:
+            desc_lower = str(description).lower()
+            # Normalizza (rimuovi variabili) come fa db.normalize_income_description
+            try:
+                normalized = db.normalize_income_description(desc_lower)
+            except Exception:
+                normalized = desc_lower
+            # Match esatto
+            exact = next((cat for pat, cat in income_patterns if pat == normalized), None)
+            if exact:
+                categories.append(exact)
+                continue
+            # Match parziale: pattern più lungo i cui termini sono tutti presenti
+            partial = next(
+                (cat for pat, cat in income_patterns if all(w in normalized for w in pat.split())),
+                None
+            )
+            if partial:
+                categories.append(partial)
+                continue
+
+        # Fallback: keyword matching (100% in-memory, nessuna query DB)
+        auto_cat = auto_categorize_by_keywords(description, amount_sign, db=None)
         categories.append(auto_cat)
 
     df['merchant'] = merchants
