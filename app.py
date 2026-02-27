@@ -160,15 +160,15 @@ db = get_database()
 
 
 @st.cache_data(ttl=300)
-def _get_transactions():
+def _get_transactions(_db):
     """Carica transazioni con cache 5 minuti. Invalidare con _get_transactions.clear()"""
-    return db.get_all_transactions()
+    return _db.get_all_transactions()
 
 
 @st.cache_data(ttl=600)
-def _get_categories():
+def _get_categories(_db):
     """Carica categorie con cache 10 minuti. Invalidare con _get_categories.clear()"""
-    return db.get_categories()
+    return _db.get_categories()
 
 
 # Esegui migrazione icone automaticamente (solo la prima volta per sessione)
@@ -233,7 +233,7 @@ def main():
         st.divider()
 
         # Quick stats nella sidebar
-        transactions = _get_transactions()
+        transactions = _get_transactions(db)
         if len(transactions) > 0:
             st.metric("Totale Transazioni", len(transactions))
             st.metric("Spesa Totale", format_currency_ita(transactions['amount'].sum()))
@@ -266,7 +266,7 @@ def show_dashboard():
     """Pagina dashboard principale"""
     st.title("🏠 Dashboard")
 
-    transactions = _get_transactions()
+    transactions = _get_transactions(db)
 
     if len(transactions) == 0:
         st.info("""
@@ -278,7 +278,7 @@ def show_dashboard():
 
     # Converti date
     transactions['date'] = pd.to_datetime(transactions['date'])
-    categories = _get_categories()
+    categories = _get_categories(db)
 
     # Statistiche rapide
     current_month = pd.Period.now('M')
@@ -655,7 +655,7 @@ def show_categories_page():
 
     tabs = st.tabs(["📋 Visualizza Categorie", "➕ Aggiungi/Modifica Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
 
-    categories = _get_categories()
+    categories = _get_categories(db)
 
     with tabs[0]:
         st.subheader("Categorie Esistenti")
@@ -940,7 +940,7 @@ def show_categories_page():
     with tabs[3]:
         st.subheader("Ricategorizza Transazioni")
 
-        transactions = _get_transactions()
+        transactions = _get_transactions(db)
 
         if len(transactions) > 0:
             # Converti colonna date in datetime
@@ -1166,7 +1166,7 @@ def show_recurring_expenses_page():
     - Ricevere promemoria per spese in scadenza
     """)
 
-    categories = _get_categories()
+    categories = _get_categories(db)
     recurring = db.get_recurring_expenses(active_only=False)
 
     tabs = st.tabs(["📋 Lista Ricorrenti", "➕ Aggiungi Nuova"])
@@ -1300,8 +1300,8 @@ def show_reports_page():
     """Pagina report e analisi"""
     st.title("📊 Report & Analisi")
 
-    transactions = _get_transactions()
-    categories = _get_categories()
+    transactions = _get_transactions(db)
+    categories = _get_categories(db)
 
     if len(transactions) == 0:
         st.info("Carica delle transazioni prima di visualizzare i report")
@@ -1532,7 +1532,7 @@ def show_forecasting_page():
     """Pagina previsioni"""
     st.title("🔮 Previsioni & Trend")
 
-    transactions = _get_transactions()
+    transactions = _get_transactions(db)
 
     if len(transactions) == 0:
         st.info("Carica delle transazioni prima di visualizzare le previsioni")
@@ -1592,7 +1592,7 @@ def show_forecasting_page():
 
     # Raccomandazioni budget
     st.divider()
-    categories = _get_categories()
+    categories = _get_categories(db)
     alerts = check_budget_alerts(transactions, categories)
     recommendations = get_budget_recommendations(alerts)
     display_recommendations(recommendations)
@@ -1607,8 +1607,8 @@ def show_settings_page():
     with tabs[0]:
         st.subheader("💾 Backup & Ripristino")
 
-        transactions = _get_transactions()
-        categories = _get_categories()
+        transactions = _get_transactions(db)
+        categories = _get_categories(db)
 
         # Sezione Backup
         st.markdown("### 📥 Crea Backup Completo")
@@ -1733,7 +1733,7 @@ def show_settings_page():
     with tabs[2]:
         st.subheader("🗑️ Gestione Database")
 
-        transactions = _get_transactions()
+        transactions = _get_transactions(db)
         st.info(f"📊 Database contiene **{len(transactions)}** transazioni")
 
         st.divider()
