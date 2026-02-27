@@ -809,7 +809,7 @@ def show_categories_page():
                 with col3:
                     if st.button("✅", key=f"apply_{grp['merchant_key']}", help=f"Applica '{sel_cat}' a tutte"):
                         db.bulk_update_category_by_ids(grp['ids'], sel_cat)
-                        db.add_merchant_category(grp['merchant_key'].lower(), sel_cat)
+                        db.learn_merchant_category(grp['merchant_key'].lower(), sel_cat)
                         _get_transactions.clear()
                         st.rerun()
                 st.divider()
