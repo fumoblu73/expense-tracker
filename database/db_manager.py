@@ -169,22 +169,35 @@ class ExpenseDB:
         else:
             df_to_insert['notes'] = ''
 
-        # Filtra duplicati: controlla se esiste già una transazione con stessa data, descrizione e importo
+        # Chiave univoca: data + descrizione + importo
+        df_to_insert['_key'] = (
+            df_to_insert['date'].astype(str) + '|' +
+            df_to_insert['description'].astype(str) + '|' +
+            df_to_insert['amount'].astype(str)
+        )
+        # Indice di occorrenza per ogni chiave nel CSV (0 = prima volta, 1 = seconda, ...)
+        # Gestisce il caso legittimo: stesso importo, stesso merchant, stesso giorno (es. 2 caffè)
+        df_to_insert['_count_csv'] = df_to_insert.groupby('_key').cumcount()
+
+        # Quante volte ogni chiave esiste già nel DB
         existing = pd.read_sql_query(
             "SELECT date, description, amount FROM transactions",
             conn
         )
+        conn.close()
 
         if len(existing) > 0:
-            # Crea chiave univoca per confronto
-            existing['key'] = existing['date'].astype(str) + '|' + existing['description'] + '|' + existing['amount'].astype(str)
-            df_to_insert['key'] = df_to_insert['date'].astype(str) + '|' + df_to_insert['description'] + '|' + df_to_insert['amount'].astype(str)
+            existing['_key'] = (
+                existing['date'].astype(str) + '|' +
+                existing['description'].astype(str) + '|' +
+                existing['amount'].astype(str)
+            )
+            existing_counts = existing['_key'].value_counts()
+            df_to_insert['_db_count'] = df_to_insert['_key'].map(existing_counts).fillna(0).astype(int)
+            # Mantieni solo le occorrenze in eccesso rispetto a quelle già nel DB
+            df_to_insert = df_to_insert[df_to_insert['_count_csv'] >= df_to_insert['_db_count']].copy()
 
-            # Filtra solo le transazioni nuove (non duplicate)
-            df_to_insert = df_to_insert[~df_to_insert['key'].isin(existing['key'])].copy()
-            df_to_insert = df_to_insert.drop(columns=['key'])
-
-        conn.close()
+        df_to_insert = df_to_insert.drop(columns=[c for c in ['_key', '_count_csv', '_db_count'] if c in df_to_insert.columns])
 
         # Inserisci solo se ci sono transazioni non duplicate
         if len(df_to_insert) > 0:
