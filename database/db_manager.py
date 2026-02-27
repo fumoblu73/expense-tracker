@@ -7,6 +7,7 @@ Version: 3.0 - Migrazione da SQLite a PostgreSQL per deploy cloud
 
 import psycopg2
 import psycopg2.errors
+from psycopg2.extras import execute_values
 import pandas as pd
 from sqlalchemy import create_engine
 import streamlit as st
@@ -27,103 +28,86 @@ class ExpenseDB:
         return psycopg2.connect(self.database_url)
 
     def init_database(self):
-        """Inizializza il database con le tabelle necessarie"""
+        """Inizializza il database — ottimizzato per minimizzare i round-trip di rete.
+
+        Cold start prima volta : 3 query  (check + CREATE TABLE batch + INSERT categorie batch)
+        Cold start successivi  : 2 query  (check → tabelle esistono → solo INSERT categorie)
+        """
         conn = self._get_conn()
         cursor = conn.cursor()
 
-        # Tabella transazioni
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                date DATE NOT NULL,
-                description TEXT,
-                amount REAL NOT NULL,
-                category TEXT NOT NULL,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        # 1 query: verifica se le tabelle esistono già
+        cursor.execute("""
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND table_name IN (
+                'transactions','categories','budget_alerts','user_settings',
+                'merchant_categories','recurring_expenses','learned_income_patterns'
             )
-        ''')
+        """)
+        existing_tables = cursor.fetchone()[0]
 
-        # Tabella categorie
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS categories (
-                id SERIAL PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
-                budget REAL DEFAULT 0,
-                color TEXT,
-                icon TEXT
-            )
-        ''')
+        if existing_tables < 7:
+            # 1 query batch: crea tutte le tabelle mancanti in un unico round-trip
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS categories (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL,
+                    budget REAL DEFAULT 0,
+                    color TEXT,
+                    icon TEXT
+                );
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id SERIAL PRIMARY KEY,
+                    date DATE NOT NULL,
+                    description TEXT,
+                    amount REAL NOT NULL,
+                    category TEXT NOT NULL,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS budget_alerts (
+                    id SERIAL PRIMARY KEY,
+                    category TEXT NOT NULL,
+                    month TEXT NOT NULL,
+                    threshold_percentage INTEGER DEFAULT 90,
+                    alert_sent BOOLEAN DEFAULT FALSE
+                );
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                );
+                CREATE TABLE IF NOT EXISTS merchant_categories (
+                    id SERIAL PRIMARY KEY,
+                    merchant TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    usage_count INTEGER DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS recurring_expenses (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    frequency TEXT NOT NULL CHECK(frequency IN ('mensile', 'settimanale', 'annuale')),
+                    day_of_period INTEGER,
+                    start_date DATE NOT NULL,
+                    active BOOLEAN DEFAULT TRUE,
+                    last_generated DATE,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS learned_income_patterns (
+                    id SERIAL PRIMARY KEY,
+                    description_pattern TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    learned_count INTEGER DEFAULT 1,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            conn.commit()
 
-        # Tabella alert budget
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS budget_alerts (
-                id SERIAL PRIMARY KEY,
-                category TEXT NOT NULL,
-                month TEXT NOT NULL,
-                threshold_percentage INTEGER DEFAULT 90,
-                alert_sent BOOLEAN DEFAULT FALSE,
-                FOREIGN KEY (category) REFERENCES categories(name)
-            )
-        ''')
-
-        # Tabella impostazioni utente
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        ''')
-
-        # Tabella apprendimento merchant -> categoria
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS merchant_categories (
-                id SERIAL PRIMARY KEY,
-                merchant TEXT UNIQUE NOT NULL,
-                category TEXT NOT NULL,
-                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                usage_count INTEGER DEFAULT 1
-            )
-        ''')
-
-        # Tabella spese ricorrenti
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS recurring_expenses (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                category TEXT NOT NULL,
-                amount REAL NOT NULL,
-                frequency TEXT NOT NULL CHECK(frequency IN ('mensile', 'settimanale', 'annuale')),
-                day_of_period INTEGER,
-                start_date DATE NOT NULL,
-                active BOOLEAN DEFAULT TRUE,
-                last_generated DATE,
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (category) REFERENCES categories(name)
-            )
-        ''')
-
-        # Tabella apprendimento pattern entrate -> categoria
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS learned_income_patterns (
-                id SERIAL PRIMARY KEY,
-                description_pattern TEXT UNIQUE NOT NULL,
-                category TEXT NOT NULL,
-                learned_count INTEGER DEFAULT 1,
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        conn.commit()
-
-        # Aggiungi categorie predefinite se non esistono
-        self._add_default_categories(cursor, conn)
-
-        conn.close()
-
-    def _add_default_categories(self, cursor, conn):
-        """Aggiunge categorie predefinite al primo avvio"""
+        # 1 query batch: inserisce categorie default mancanti (execute_values → 1 round-trip)
         default_categories = [
             ('Alimentari', 500, '#FF6B6B', 'fa-cart-shopping'),
             ('Trasporti', 200, '#4ECDC4', 'fa-car'),
@@ -137,19 +121,15 @@ class ExpenseDB:
             ('Prelievo Emanuele', 0, '#5B9BD5', 'fa-hand-holding-dollar'),
             ('Prelievo Cinzia', 0, '#ED7D31', 'fa-hand-holding-dollar'),
             ('Altro', 100, '#95A5A6', 'fa-box'),
-            ('Non Categorizzato', 0, '#BDC3C7', 'fa-circle-question')
+            ('Non Categorizzato', 0, '#BDC3C7', 'fa-circle-question'),
         ]
-
-        for name, budget, color, icon in default_categories:
-            try:
-                cursor.execute(
-                    'INSERT INTO categories (name, budget, color, icon) VALUES (%s, %s, %s, %s) ON CONFLICT (name) DO NOTHING',
-                    (name, budget, color, icon)
-                )
-            except Exception:
-                pass
-
+        execute_values(
+            cursor,
+            'INSERT INTO categories (name, budget, color, icon) VALUES %s ON CONFLICT (name) DO NOTHING',
+            default_categories
+        )
         conn.commit()
+        conn.close()
 
     def insert_transactions(self, df):
         """Inserisce transazioni dal DataFrame evitando duplicati"""
