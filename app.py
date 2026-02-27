@@ -301,8 +301,8 @@ def main():
             "Navigazione",
             [
                 "🏠 Dashboard",
-                "📤 Carica Dati",
-                "🏷️ Gestisci Categorie",
+                "📤 Dati",
+                "🏷️ Categorie",
                 "💳 Spese Ricorrenti",
                 "📊 Report & Analisi",
                 "🔮 Previsioni",
@@ -328,7 +328,7 @@ def main():
     # Routing pagine
     if "Dashboard" in page:
         show_dashboard()
-    elif "Carica Dati" in page:
+    elif "Dati" in page:
         show_upload_page()
     elif "Categorie" in page:
         show_categories_page()
@@ -354,7 +354,7 @@ def show_dashboard():
         st.info("""
         👋 Benvenuto! Inizia caricando i tuoi dati bancari.
 
-        Vai su **📤 Carica Dati** nella sidebar per importare il tuo primo file CSV.
+        Vai su **📤 Dati** nella sidebar per importare il tuo primo file CSV.
         """)
         return
 
@@ -605,7 +605,7 @@ def show_dashboard():
 
 def show_upload_page():
     """Pagina caricamento CSV"""
-    st.title("📤 Carica Dati Bancari")
+    st.title("📤 Dati Bancari")
 
     st.info("""
     📋 **Come funziona:**
@@ -720,7 +720,7 @@ def show_upload_page():
 
                             # Suggerisci di categorizzare se ci sono nuove transazioni
                             if saved_count > 0 and not use_smart_cat:
-                                st.info("💡 Vai su **🏷️ Gestisci Categorie** per categorizzare le transazioni")
+                                st.info("💡 Vai su **🏷️ Categorie** per categorizzare le transazioni")
 
                         except Exception as e:
                             st.error(f"❌ Errore nel salvataggio: {str(e)}")
@@ -728,7 +728,7 @@ def show_upload_page():
 
 def show_categories_page():
     """Pagina gestione categorie"""
-    st.title("🏷️ Gestisci Categorie")
+    st.title("🏷️ Categorie")
 
     tabs = st.tabs(["📋 Visualizza Categorie", "➕ Aggiungi/Modifica Categoria", "✏️ Modifica Budget", "🔄 Ricategorizza"])
 
@@ -1869,8 +1869,8 @@ def show_settings_page():
 
         **Come Iniziare:**
 
-        1. **Carica Dati**: Vai su "📤 Carica Dati" e importa il CSV dalla tua banca
-        2. **Categorizza**: Assegna categorie alle transazioni in "🏷️ Gestisci Categorie"
+        1. **Dati**: Vai su "📤 Dati" e importa il CSV dalla tua banca
+        2. **Categorizza**: Assegna categorie alle transazioni in "🏷️ Categorie"
         3. **Imposta Budget**: Configura i budget mensili per categoria
         4. **Monitora**: Controlla la dashboard per alert e statistiche
         5. **Analizza**: Usa report e previsioni per ottimizzare le spese
@@ -1896,9 +1896,9 @@ def show_help_page():
         st.markdown("""
         ### Come iniziare
 
-        1. **Carica il tuo CSV bancario** → vai su *📤 Carica Dati* e importa l'estratto conto della tua banca.
-        2. **Rivedi le categorie** → l'app assegna automaticamente una categoria a ogni transazione. Correggila se necessario in *🏷️ Gestisci Categorie*.
-        3. **Imposta i budget mensili** → in *🏷️ Gestisci Categorie* inserisci quanto vuoi spendere al mese per ogni voce (es. Alimentari €500).
+        1. **Carica il tuo CSV bancario** → vai su *📤 Dati* e importa l'estratto conto della tua banca.
+        2. **Rivedi le categorie** → l'app assegna automaticamente una categoria a ogni transazione. Correggila se necessario in *🏷️ Categorie*.
+        3. **Imposta i budget mensili** → in *🏷️ Categorie* inserisci quanto vuoi spendere al mese per ogni voce (es. Alimentari €500).
         4. **Monitora la Dashboard** → ogni giorno controlla il riepilogo, il budget disponibile e gli alert.
         5. **Aggiungi le spese ricorrenti** → in *💳 Spese Ricorrenti* inserisci abbonamenti e bollette fisse così vengono detratti automaticamente dal budget disponibile.
 
@@ -1960,7 +1960,7 @@ def show_help_page():
         """)
 
     # ── CARICA DATI ───────────────────────────────────────────────────────────
-    with st.expander("📤 Carica Dati"):
+    with st.expander("📤 Dati"):
         st.markdown("""
         ### Importazione CSV
         1. Esporta il file CSV dall'home banking della tua banca
@@ -1984,7 +1984,7 @@ def show_help_page():
         """)
 
     # ── CATEGORIE ─────────────────────────────────────────────────────────────
-    with st.expander("🏷️ Gestisci Categorie"):
+    with st.expander("🏷️ Categorie"):
         st.markdown("""
         ### Categorie di Default
         Al primo avvio l'app crea automaticamente 11 categorie predefinite con budget suggeriti:
@@ -2155,7 +2155,7 @@ def show_help_page():
         ---
 
         **Perché alcune transazioni vanno in "Non Categorizzato"?**
-        L'app non ha riconosciuto il merchant o il testo della transazione. Vai in *🏷️ Gestisci Categorie*, assegna manualmente la categoria corretta: l'app imparerà per le importazioni future.
+        L'app non ha riconosciuto il merchant o il testo della transazione. Vai in *🏷️ Categorie*, assegna manualmente la categoria corretta: l'app imparerà per le importazioni future.
         """)
 
 
