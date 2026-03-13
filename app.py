@@ -760,8 +760,27 @@ def show_categories_page():
                     with col4:
                         if st.button("🗑️", key=f"del_{cat['name']}", help="Elimina categoria"):
                             if cat['name'] not in ['Non Categorizzato']:
+                                tx_count = db.count_transactions_by_category(cat['name'])
+                                if tx_count == 0:
+                                    db.delete_category(cat['name'])
+                                    _get_categories.clear()
+                                    st.rerun()
+                                else:
+                                    st.session_state[f'confirm_del_{cat["name"]}'] = True
+
+                    if st.session_state.get(f'confirm_del_{cat["name"]}'):
+                        tx_count = db.count_transactions_by_category(cat['name'])
+                        st.warning(f"⚠️ La categoria **{cat['name']}** ha **{tx_count} spese collegate** che verranno spostate in *Non Categorizzato*. Continuare?")
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            if st.button("Sì, elimina", key=f"confirm_yes_{cat['name']}", type="primary"):
                                 db.delete_category(cat['name'])
+                                del st.session_state[f'confirm_del_{cat["name"]}']
                                 _get_categories.clear()
+                                st.rerun()
+                        with c2:
+                            if st.button("Annulla", key=f"confirm_no_{cat['name']}"):
+                                del st.session_state[f'confirm_del_{cat["name"]}']
                                 st.rerun()
 
                     st.divider()

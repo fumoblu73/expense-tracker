@@ -328,6 +328,15 @@ class ExpenseDB:
 
         return success
 
+    def count_transactions_by_category(self, category_name):
+        """Conta le transazioni associate a una categoria"""
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM transactions WHERE category = %s", (category_name,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+
     def delete_category(self, category_name):
         """Elimina una categoria (le transazioni associate diventano 'Non Categorizzato')"""
         conn = self._get_conn()
