@@ -107,6 +107,10 @@ class ExpenseDB:
             """)
             conn.commit()
 
+        # Migration: aggiungi colonna merchant se non esiste
+        cursor.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS merchant TEXT DEFAULT NULL")
+        conn.commit()
+
         # Inserisce categorie default solo al primo avvio (tabella vuota)
         cursor.execute("SELECT COUNT(*) FROM categories")
         if cursor.fetchone()[0] == 0:
@@ -224,6 +228,13 @@ class ExpenseDB:
             "UPDATE transactions SET category = %s WHERE id = %s",
             (new_category, transaction_id)
         )
+        conn.commit()
+        conn.close()
+
+    def update_transaction_merchant(self, transaction_id, merchant):
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE transactions SET merchant = %s WHERE id = %s", (merchant, transaction_id))
         conn.commit()
         conn.close()
 

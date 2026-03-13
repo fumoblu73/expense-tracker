@@ -1253,11 +1253,13 @@ def show_categories_page():
                     with c_chk:
                         st.checkbox("", key=f"sel_{row['id']}", label_visibility="collapsed")
                     with c_info:
-                        merchant = extract_merchant(row['description'])
+                        merchant = row.get('merchant') or extract_merchant(row['description'])
                         desc = str(row['description'])[:60] + '…' if len(str(row['description'])) > 60 else str(row['description'])
                         merchant_tag = f" · 🏪 {merchant}" if merchant else ""
                         st.markdown(f"<small><b>{row['date']}</b> · {format_currency_ita(row['amount'])}{merchant_tag}</small>", unsafe_allow_html=True)
                         st.caption(desc)
+                        if not merchant:
+                            st.text_input("🏪 Aggiungi merchant", placeholder="es. Bar Rossi", key=f"mer_{row['id']}", label_visibility="collapsed")
                     with c_cat:
                         cur_idx = cat_list.index(row['category']) if row['category'] in cat_list else 0
                         new_cat = st.selectbox("", cat_list, index=cur_idx,
@@ -1265,11 +1267,14 @@ def show_categories_page():
                     with c_save:
                         if st.button("💾", key=f"save_cat_{row['id']}", help="Salva"):
                             db.update_transaction_category(row['id'], new_cat)
+                            manual_merchant = st.session_state.get(f"mer_{row['id']}", "").strip()
+                            m = manual_merchant or extract_merchant(row['description'])
                             _get_transactions.clear()
                             if new_cat in income_categories:
                                 db.save_income_pattern(row['description'], new_cat)
                             else:
-                                m = extract_merchant(row['description'])
+                                if manual_merchant:
+                                    db.update_transaction_merchant(row['id'], manual_merchant)
                                 if m:
                                     db.learn_merchant_category(m, new_cat)
                             st.rerun()
