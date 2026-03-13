@@ -107,27 +107,29 @@ class ExpenseDB:
             """)
             conn.commit()
 
-        # 1 query batch: inserisce categorie default mancanti (execute_values → 1 round-trip)
-        default_categories = [
-            ('Alimentari', 500, '#FF6B6B', 'fa-cart-shopping'),
-            ('Trasporti', 200, '#4ECDC4', 'fa-car'),
-            ('Utenze', 300, '#45B7D1', 'fa-bolt'),
-            ('Ristoranti', 250, '#FFA07A', 'fa-utensils'),
-            ('Shopping', 200, '#98D8C8', 'fa-bag-shopping'),
-            ('Salute', 150, '#F7DC6F', 'fa-heart-pulse'),
-            ('Svago', 150, '#BB8FCE', 'fa-film'),
-            ('Casa', 400, '#85C1E2', 'fa-house'),
-            ('Entrate', 0, '#2ECC71', 'fa-money-bill-wave'),
-            ('Prelievo Emanuele', 0, '#5B9BD5', 'fa-hand-holding-dollar'),
-            ('Prelievo Cinzia', 0, '#ED7D31', 'fa-hand-holding-dollar'),
-            ('Altro', 100, '#95A5A6', 'fa-box'),
-            ('Non Categorizzato', 0, '#BDC3C7', 'fa-circle-question'),
-        ]
-        execute_values(
-            cursor,
-            'INSERT INTO categories (name, budget, color, icon) VALUES %s ON CONFLICT (name) DO NOTHING',
-            default_categories
-        )
+        # Inserisce categorie default solo al primo avvio (tabella vuota)
+        cursor.execute("SELECT COUNT(*) FROM categories")
+        if cursor.fetchone()[0] == 0:
+            default_categories = [
+                ('Alimentari', 500, '#FF6B6B', 'fa-cart-shopping'),
+                ('Trasporti', 200, '#4ECDC4', 'fa-car'),
+                ('Utenze', 300, '#45B7D1', 'fa-bolt'),
+                ('Ristoranti', 250, '#FFA07A', 'fa-utensils'),
+                ('Shopping', 200, '#98D8C8', 'fa-bag-shopping'),
+                ('Salute', 150, '#F7DC6F', 'fa-heart-pulse'),
+                ('Svago', 150, '#BB8FCE', 'fa-film'),
+                ('Casa', 400, '#85C1E2', 'fa-house'),
+                ('Entrate', 0, '#2ECC71', 'fa-money-bill-wave'),
+                ('Prelievo Emanuele', 0, '#5B9BD5', 'fa-hand-holding-dollar'),
+                ('Prelievo Cinzia', 0, '#ED7D31', 'fa-hand-holding-dollar'),
+                ('Altro', 100, '#95A5A6', 'fa-box'),
+                ('Non Categorizzato', 0, '#BDC3C7', 'fa-circle-question'),
+            ]
+            execute_values(
+                cursor,
+                'INSERT INTO categories (name, budget, color, icon) VALUES %s ON CONFLICT (name) DO NOTHING',
+                default_categories
+            )
         conn.commit()
         conn.close()
 
