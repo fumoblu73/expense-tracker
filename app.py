@@ -1204,63 +1204,93 @@ def show_categories_page():
                 st.write(f"Totale **{len(filtered_transactions)}** transazioni")
 
             if len(filtered_transactions) > 0:
-                st.info("💡 **Sistema di Apprendimento Attivo**: Quando categorizzi una transazione, l'app ricorderà automaticamente:\n"
-                       "- **Spese**: merchant/negozio per categorizzazione futura\n"
-                       "- **Entrate**: pattern descrizione per riconoscere entrate simili")
+                total = len(filtered_transactions)
+                PAGE_SIZE = 50
+                total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
 
-                # Mostra le prime 50 transazioni filtrate
-                display_count = min(len(filtered_transactions), 50)
-                if len(filtered_transactions) > 50:
-                    st.caption(f"Mostrate prime {display_count} di {len(filtered_transactions)} transazioni")
+                if st.session_state.get('cat_tx_page', 0) >= total_pages:
+                    st.session_state['cat_tx_page'] = 0
+                page = st.session_state.get('cat_tx_page', 0)
+                page_df = filtered_transactions.iloc[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
 
-                for idx, row in filtered_transactions.head(50).iterrows():
+                # Barra azione bulk (usa stato checkbox del rerun precedente)
+                selected_ids = [int(r) for r in page_df['id'].tolist()
+                                if st.session_state.get(f'sel_{r}', False)]
+                if selected_ids:
                     with st.container():
-                        col1, col2, col3 = st.columns([3, 2, 1])
-
-                        with col1:
-                            st.write(f"**{row['description']}**")
-
-                            # Estrai e mostra merchant se rilevato
-                            merchant = extract_merchant(row['description'])
-                            if merchant:
-                                st.caption(f"🏪 Merchant: **{merchant}**")
-                            st.caption(f"{row['date']} - {format_currency_ita(row['amount'])}")
-
-                        with col2:
-                            new_cat = st.selectbox(
-                                "Categoria",
-                                options=categories['name'].tolist(),
-                                key=f"cat_{row['id']}",
-                                label_visibility="collapsed"
-                            )
-
-                        with col3:
-                            if st.button("💾", key=f"save_cat_{row['id']}", help="Salva"):
-                                # Aggiorna categoria transazione
-                                db.update_transaction_category(row['id'], new_cat)
-                                _get_transactions.clear()
-
-                                # Determina se è entrata o spesa
+                        ba1, ba2, ba3, ba4 = st.columns([1.5, 2.5, 1.2, 1])
+                        with ba1:
+                            st.markdown(f"**{len(selected_ids)} selezionate**")
+                        with ba2:
+                            bulk_cat = st.selectbox("cat", categories['name'].tolist(),
+                                                    key="bulk_cat", label_visibility="collapsed")
+                        with ba3:
+                            if st.button("✅ Applica", key="bulk_apply"):
+                                db.bulk_update_category_by_ids(selected_ids, bulk_cat)
                                 income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso',
                                                     'Sussidi', 'Investimenti', 'Altro Reddito']
-                                is_income = new_cat in income_categories
-
-                                if is_income:
-                                    # Per ENTRATE: salva pattern descrizione
-                                    db.save_income_pattern(row['description'], new_cat)
-                                    st.success(f"✅ Salvato! L'app ricorderà questo pattern → {new_cat}")
-                                else:
-                                    # Per SPESE: impara associazione merchant -> categoria
-                                    merchant = extract_merchant(row['description'])
-                                    if merchant:
-                                        db.learn_merchant_category(merchant, new_cat)
-                                        st.success(f"✅ Salvato! L'app ricorderà **{merchant}** → {new_cat}")
-                                    else:
-                                        st.success("✅ Categoria aggiornata")
-
+                                if bulk_cat not in income_categories:
+                                    for tx_id in selected_ids:
+                                        tx_rows = page_df[page_df['id'] == tx_id]
+                                        if len(tx_rows) > 0:
+                                            m = extract_merchant(tx_rows.iloc[0]['description'])
+                                            if m:
+                                                db.learn_merchant_category(m, bulk_cat)
+                                for tx_id in selected_ids:
+                                    st.session_state.pop(f'sel_{tx_id}', None)
+                                _get_transactions.clear()
+                                st.rerun()
+                        with ba4:
+                            if st.button("✖ Deseleziona", key="bulk_clear"):
+                                for tx_id in selected_ids:
+                                    st.session_state.pop(f'sel_{tx_id}', None)
                                 st.rerun()
 
-                        st.divider()
+                # Righe transazioni compatte
+                income_categories = ['Stipendio', 'Pensione', 'Bonifico', 'Rimborso',
+                                    'Sussidi', 'Investimenti', 'Altro Reddito']
+                cat_list = categories['name'].tolist()
+                for idx, row in page_df.iterrows():
+                    c_chk, c_info, c_cat, c_save = st.columns([0.3, 3.5, 2, 0.4])
+                    with c_chk:
+                        st.checkbox("", key=f"sel_{row['id']}", label_visibility="collapsed")
+                    with c_info:
+                        merchant = extract_merchant(row['description'])
+                        desc = str(row['description'])[:60] + '…' if len(str(row['description'])) > 60 else str(row['description'])
+                        merchant_tag = f" · 🏪 {merchant}" if merchant else ""
+                        st.markdown(f"<small><b>{row['date']}</b> · {format_currency_ita(row['amount'])}{merchant_tag}</small>", unsafe_allow_html=True)
+                        st.caption(desc)
+                    with c_cat:
+                        cur_idx = cat_list.index(row['category']) if row['category'] in cat_list else 0
+                        new_cat = st.selectbox("", cat_list, index=cur_idx,
+                                               key=f"cat_{row['id']}", label_visibility="collapsed")
+                    with c_save:
+                        if st.button("💾", key=f"save_cat_{row['id']}", help="Salva"):
+                            db.update_transaction_category(row['id'], new_cat)
+                            _get_transactions.clear()
+                            if new_cat in income_categories:
+                                db.save_income_pattern(row['description'], new_cat)
+                            else:
+                                m = extract_merchant(row['description'])
+                                if m:
+                                    db.learn_merchant_category(m, new_cat)
+                            st.rerun()
+
+                # Controlli paginazione
+                if total_pages > 1:
+                    st.markdown("---")
+                    pg1, pg2, pg3 = st.columns([1, 2, 1])
+                    with pg1:
+                        if st.button("◀ Prec", key="pg_prev", disabled=(page == 0)):
+                            st.session_state['cat_tx_page'] = page - 1
+                            st.rerun()
+                    with pg2:
+                        st.markdown(f"<center>Pagina <b>{page+1}</b> di <b>{total_pages}</b> · {total} transazioni</center>",
+                                    unsafe_allow_html=True)
+                    with pg3:
+                        if st.button("Succ ▶", key="pg_next", disabled=(page >= total_pages - 1)):
+                            st.session_state['cat_tx_page'] = page + 1
+                            st.rerun()
             else:
                 st.success("🎉 Tutte le transazioni sono categorizzate!")
 
