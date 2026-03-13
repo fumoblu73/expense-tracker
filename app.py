@@ -192,9 +192,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Inizializza database
-@st.cache_resource
 def get_database():
-    """Crea e restituisce istanza database"""
     return ExpenseDB()
 
 def migrate_emoji_to_fontawesome(db):
